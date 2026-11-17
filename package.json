@@ -1,0 +1,20 @@
+{
+  "name": "biblioteca-escolar-bd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Base de datos académica independiente para una biblioteca escolar",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/start.mjs",
+    "test": "node --test --test-concurrency=1 tests/biblioteca.test.mjs tests/api.test.mjs",
+    "db:init": "node scripts/local.mjs init",
+    "db:resumen": "node scripts/local.mjs resumen",
+    "db:sql": "node scripts/local.mjs sql"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.16"
+  }
+}
