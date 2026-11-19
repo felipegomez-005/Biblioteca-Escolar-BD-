@@ -5,12 +5,15 @@
   "type": "module",
   "description": "Base de datos académica independiente para una biblioteca escolar",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.12"
   },
   "scripts": {
     "start": "node server/start.mjs",
-    "test": "node --test --test-concurrency=1 tests/biblioteca.test.mjs tests/api.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/biblioteca.test.mjs tests/api.test.mjs tests/google-books.test.mjs tests/calendar.test.mjs tests/sanctions.test.mjs tests/administration.test.mjs tests/backup.test.mjs",
     "db:init": "node scripts/local.mjs init",
+    "db:backup": "node scripts/backup.mjs crear",
+    "db:verificar": "node scripts/backup.mjs verificar",
+    "db:restaurar": "node scripts/backup.mjs restaurar",
     "db:resumen": "node scripts/local.mjs resumen",
     "db:sql": "node scripts/local.mjs sql"
   },

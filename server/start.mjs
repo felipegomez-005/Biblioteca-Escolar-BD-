@@ -1,7 +1,11 @@
 import { mkdir,open,unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { root,openDb,initialize } from '../scripts/db.mjs';
+import { root,openDb,initialize,upgrade } from '../scripts/db.mjs';
 import { createApp } from './app.mjs';
+import { loadEnvFile } from 'node:process';
+
+try {loadEnvFile(path.join(root,'.env'));}
+catch(error) {if(error.code!=='ENOENT') throw error;}
 
 const memory=process.env.BIBLIOTECA_PRUEBA==='1';
 const local=path.join(root,'.local');
@@ -22,6 +26,7 @@ try {
   db=await openDb(memory?undefined:path.join(local,'biblioteca'));
   if(memory) await initialize(db);
   else if(!(await db.query("SELECT to_regnamespace('biblioteca') IS NOT NULL AS existe")).rows[0].existe) throw new Error('Primero ejecute npm.cmd run db:init.');
+  if(!memory) await upgrade(db);
   server=createApp(db);
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve);});
   console.log(`Biblioteca escolar: http://127.0.0.1:${port}`);

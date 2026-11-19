@@ -150,6 +150,7 @@ erDiagram
 - La sanción por atraso se obtiene del historial al consultar. La tabla Sanción registra la conducta grave de dos semanas. La deuda y la sanción se comprueban independientemente.
 - Calendario es una tabla de referencia consultada por funciones. Se exige cobertura de las fechas utilizadas, sin convertir todos los atributos de fecha en relaciones del diagrama.
 - `control_operacion` es una tabla técnica de una fila para coordinar escrituras; no es una entidad del negocio y se omite del gráfico.
+- `cambio_calendario` es una bitácora técnica añadida por `06_administracion_calendario.sql`: guarda identificador, instante de registro, período, tipo, motivo, cantidad de días y una captura JSON de los valores anteriores/posteriores. No es una entidad del préstamo y se omite del gráfico de negocio. Sus capturas documentan cambios; no sustituyen la tabla relacional `calendario` que utilizan las reglas.
 
 ## Transformación y normalización: base para el informe
 
@@ -161,6 +162,6 @@ Las claves determinan los atributos de su propia tabla: `libro.id → título, I
 
 `vencimiento_vigente`, `cantidad_renovaciones` y `fecha_cierre` son datos derivados materializados para las operaciones. Se conservan mediante triggers y se prohíbe su modificación directa. Su almacenamiento debe explicarse en el informe como decisión de consistencia y acceso, sin ocultar que existe información calculable a partir del historial.
 
-El destinatario de un aviso es una captura del correo al generarlo, no el correo actual del usuario. El plazo de sanción guardado corresponde al calendario usado al registrarla. Cambiar el calendario después de cargar movimientos requiere un procedimiento administrativo aún no incluido.
+El destinatario de un aviso es una captura del correo al generarlo, no el correo actual del usuario. El plazo de sanción guardado corresponde al calendario usado al registrarla. La nueva administración del calendario rechaza cambios que alterarían fechas utilizadas por movimientos o sanciones. No incluye una reprogramación de vencimientos históricos.
 
 Esta explicación es una base de trabajo, no la justificación formal por cada relación ni los tres diagramas finales exigidos por la guía. El esquema SQL contiene todos los atributos y restricciones, incluidos los no mostrados para facilitar la lectura.

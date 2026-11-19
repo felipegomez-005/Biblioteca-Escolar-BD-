@@ -4,7 +4,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const fmt=d=>d?new Intl.DateTimeFormat('es-CL',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(String(d).slice(0,10)+'T12:00:00Z')):'—';
 const types={estudiante:'Estudiante',docente:'Docente',asistente:'Asistente'};
 const reasons={usuario_inactivo:'Usuario inactivo',ejemplar_atrasado:'Tiene ejemplares atrasados',sancion_por_atraso:'Sanción por atraso vigente',conducta_grave:'Sanción por conducta grave vigente',reposicion_o_reembolso_pendiente:'Reposición o reembolso pendiente'};
-let context,routeVersion=0,modalBusy=false,toastTimer,selectedUser=null;
+let context,routeVersion=0,modalBusy=false,toastTimer,selectedUser=null,detailRequest=0;
 const main=$('#contenido'),dialog=$('#modal');
 
 async function api(url,options={}) {
@@ -27,6 +27,7 @@ function input(name,label,value='',{required=true,type='text',max=150,help='',fu
 function select(name,label,options) {return field(name,label,`<select id="${name}" name="${name}" required>${options}</select>`);}
 function actions(label) {return `<div class="form-error" role="alert"></div><div class="dialog-foot"><button class="button secondary" type="button" data-close>Cancelar</button><button class="button" type="submit">${label}</button></div>`;}
 function showModal(title,content,submit) {
+  ++detailRequest;
   $('#modal-title').textContent=title;$('#modal-body').innerHTML=content;
   $$('[data-close]',dialog).forEach(b=>b.onclick=()=>{if(!modalBusy)dialog.close();});
   const form=$('form',dialog);
@@ -42,6 +43,7 @@ function showModal(title,content,submit) {
   if(!dialog.open)dialog.showModal();
 }
 $('#close-modal').onclick=()=>{if(!modalBusy)dialog.close();};
+dialog.addEventListener('close',()=>{++detailRequest;});
 dialog.addEventListener('cancel',e=>{if(modalBusy)e.preventDefault();});
 function watchSearch(fn,id='search') {let timer;$('#'+id).oninput=e=>{clearTimeout(timer);timer=setTimeout(()=>fn(e.target.value),180);};}
 function filterRows(rows,term,keys) {const t=term.toLocaleLowerCase('es').normalize('NFD').replace(/\p{Diacritic}/gu,'');return rows.filter(r=>keys.map(k=>r[k]||'').join(' ').toLocaleLowerCase('es').normalize('NFD').replace(/\p{Diacritic}/gu,'').includes(t));}
@@ -66,24 +68,95 @@ async function catalog(version) {
     `<div class="toolbar">${search('Buscar por título, autor o ISBN')}<span class="count" id="result-count"></span></div><div id="book-results"></div>`;
   const render=term=>{
     const list=filterRows(books,term,['titulo','autores','isbn']);$('#result-count').textContent=`${list.length} libros`;
-    $('#book-results').innerHTML=list.length?`<div class="table-wrap"><table><thead><tr><th>Libro / autor</th><th>Editorial</th><th>ISBN</th><th>Disponibilidad</th><th></th></tr></thead><tbody>${list.map(b=>`<tr><td>${booksCell(b)}</td><td>${esc(b.editorial||'Sin registrar')}</td><td><small>${esc(b.isbn||'Sin ISBN')}</small></td><td><span class="badge ${b.disponibles?'':'neutral'}">${b.disponibles} de ${b.copias} disponibles</span></td><td><button class="text-button" data-copies="${b.id}">Ver copias →</button></td></tr>`).join('')}</tbody></table></div>`:empty('No encontramos libros','Prueba con otro título o registra el primer libro.');
+    $('#book-results').innerHTML=list.length?`<div class="table-wrap"><table><thead><tr><th>Libro / autor</th><th>Editorial</th><th>ISBN</th><th>Disponibilidad</th><th></th></tr></thead><tbody>${list.map(b=>`<tr><td>${booksCell(b)}</td><td>${esc(b.editorial||'Sin registrar')}</td><td><small>${esc(b.isbn||'Sin ISBN')}</small></td><td><span class="badge ${b.disponibles?'':'neutral'}">${b.disponibles} de ${b.copias} disponibles</span></td><td><div class="actions"><button class="text-button" data-edit-book="${b.id}">Editar</button><button class="text-button" data-copies="${b.id}">Ver copias →</button></div></td></tr>`).join('')}</tbody></table></div>`:empty('No encontramos libros','Prueba con otro título o registra el primer libro.');
     $$('[data-copies]').forEach(button=>button.onclick=()=>viewCopies(books.find(b=>b.id===Number(button.dataset.copies))));
+    $$('[data-edit-book]').forEach(button=>button.onclick=()=>editBookForm(Number(button.dataset.editBook)));
   };render('');watchSearch(render);$('#add-book').onclick=addBook;
 }
 function addBook() {
-  showModal('Registrar libro',`<form><p class="help">Registra la edición una sola vez. Después puedes agregar todas sus copias.</p><div class="fields">
+  let source=null;
+  showModal('Registrar libro',`<form><p class="help">Registra la edición una sola vez. Busca su ISBN para completar los datos o ingrésalos manualmente.</p>
+    <section class="isbn-lookup" aria-label="Búsqueda por ISBN">
+      ${input('isbn','ISBN (opcional)','',{required:false,max:40,help:'Acepta ISBN de 10 o 13 caracteres, con o sin guiones.'})}
+      <button class="button secondary" type="button" id="lookup-isbn">Buscar en Google Books</button>
+      <div id="isbn-status" class="help" role="status" aria-live="polite"></div><div id="isbn-results"></div>
+    </section><p class="help" id="book-source">Origen de los datos: ingreso manual.</p><button type="button" class="text-button" id="use-manual" hidden>Continuar con ingreso manual</button><div class="fields">
     ${input('titulo','Título','',{full:true,max:250})}${input('autores','Autor o autores','',{required:false,full:true,max:1000,help:'Si hay varios, sepáralos con punto y coma (;).'})}
-    ${input('isbn','ISBN (opcional)','',{required:false,max:30})}${input('editorial','Editorial (opcional)','',{required:false})}
+    ${input('editorial','Editorial (opcional)','',{required:false})}
     ${input('anio_publicacion','Año de publicación (opcional)','',{required:false,type:'number'})}${input('generos','Género (opcional)','',{required:false,max:500})}
-    ${input('codigo','Código de la primera copia (opcional)','',{required:false,full:true,max:80,help:'Debe identificar un único ejemplar físico. Puedes añadir las copias más adelante.'})}</div>${actions('Guardar libro')}</form>`,async data=>{await post('/libros',data);toast('Libro registrado en el catálogo.');await renderRoute();});
+    ${input('codigo','Código de la primera copia (opcional)','',{required:false,full:true,max:80,help:'Debe identificar un único ejemplar físico. Puedes añadir las copias más adelante.'})}</div>${actions('Guardar libro')}</form>`,async data=>{
+      await post('/libros',{...data,origen_datos:source?'google_books':'manual',...(source?{google_books_id:source.google_books_id,consulta_id:source.consulta_id}:{})});
+      toast('Libro registrado en el catálogo.');await renderRoute();
+    });
+  const form=$('form',dialog),isbnField=$('#isbn',form),lookup=$('#lookup-isbn',form),status=$('#isbn-status',form),results=$('#isbn-results',form),sourceLabel=$('#book-source',form),save=$('button[type=submit]',form);
+  const manual=$('#use-manual',form);
+  manual.onclick=()=>{source=null;manual.hidden=true;sourceLabel.textContent='Origen de los datos: ingreso manual. Revisa la información antes de guardar.';};
+  let sequence=0,requestController;
+  isbnField.oninput=()=>{
+    sequence++;requestController?.abort();source=null;manual.hidden=true;results.innerHTML='';status.textContent='';
+    sourceLabel.textContent='Origen de los datos: ingreso manual. Si cambiaste el ISBN, revisa también el título y los demás campos.';
+    lookup.disabled=false;lookup.textContent='Buscar en Google Books';save.disabled=false;
+  };
+  lookup.onclick=async()=>{
+    const key=++sequence;requestController?.abort();requestController=new AbortController();
+    lookup.disabled=true;save.disabled=true;lookup.textContent='Buscando…';results.innerHTML='';
+    status.textContent='Consultando el ISBN. Los datos no se guardarán hasta que confirmes el formulario.';
+    try {
+      const response=await api('/libros/isbn?isbn='+encodeURIComponent(isbnField.value),{signal:requestController.signal});
+      if(key!==sequence || !form.isConnected || !dialog.open)return;
+      if(response.existente) {
+        status.textContent='Este ISBN ya existe en el catálogo. Puedes agregar una copia a ese libro.';
+        results.innerHTML=`<button type="button" class="text-button" id="existing-book">Ver copias de ${esc(response.existente.titulo)} →</button>`;
+        $('#existing-book',form).onclick=()=>viewCopies(response.existente);return;
+      }
+      if(!response.resultados.length) {
+        status.textContent='No se encontró una edición con ese ISBN exacto. Puedes completar los datos manualmente.';return;
+      }
+      status.textContent='Selecciona el resultado correspondiente y revisa sus datos antes de guardar.';
+      results.innerHTML=response.resultados.map((book,index)=>`<article class="isbn-result"><strong>${esc(book.titulo)}</strong><p class="help">${esc(book.autores||'Autores sin información')}<br>${esc(book.editorial||'Editorial sin información')} · ${esc(book.anio_publicacion||'Año sin información')}</p><button class="button small secondary" type="button" data-result="${index}">Usar estos datos</button></article>`).join('');
+      $$('[data-result]',results).forEach(button=>button.onclick=()=>{
+        source=response.resultados[Number(button.dataset.result)];
+        manual.hidden=false;
+        for(const name of ['isbn','titulo','autores','editorial','anio_publicacion','generos']) form.elements[name].value=source[name]??'';
+        sourceLabel.textContent='Origen de los datos: Google Books. Revisa y corrige la información; los campos sin datos se completan manualmente.';
+        status.textContent='Datos cargados en el formulario. Todavía no se han guardado.';
+        results.innerHTML='';form.elements.titulo.focus();
+      });
+    } catch(error) {
+      if(key===sequence && form.isConnected && dialog.open)status.textContent=error.message;
+    } finally {
+      if(key===sequence && form.isConnected){lookup.disabled=false;save.disabled=false;lookup.textContent='Buscar en Google Books';}
+    }
+  };
+}
+async function editBookForm(id) {
+  const key=++detailRequest,version=routeVersion;
+  try {
+    const book=await api('/libros/'+id);if(key!==detailRequest || version!==routeVersion)return;
+    showModal('Editar libro',`<form><p class="help">Corrige los datos de esta edición. Sus copias y movimientos conservarán sus identificadores. Para registrar otra edición, utiliza Registrar libro.</p>
+      <div class="fields">${input('titulo','Título',book.titulo,{max:250,full:true})}
+      ${input('isbn','ISBN (opcional)',book.isbn||'',{required:false,max:40,full:true})}
+      ${input('autores','Autor o autores',book.autores_detalle.map(a=>a.nombre).join('; '),{required:false,max:1000,full:true,help:'Separa los nombres con punto y coma (;).'})}
+      ${input('editorial','Editorial (opcional)',book.editorial||'',{required:false})}
+      ${input('anio_publicacion','Año de publicación (opcional)',book.anio_publicacion||'',{required:false,type:'number'})}
+      ${input('generos','Géneros (opcional)',book.generos_detalle.join('; '),{required:false,max:500,full:true,help:'Separa los géneros con punto y coma (;).'})}</div>
+      <p class="help">${book.origen_datos==='google_books'?'El registro proviene de Google Books. Si cambias el ISBN por otro, se quitará ese vínculo y quedará como ingreso manual.':'Origen de los datos: ingreso manual.'}</p>
+      ${actions('Guardar cambios')}</form>`,async data=>{
+        await post('/libros/'+id,{...data,version:book.version},'PATCH');toast('Datos del libro actualizados.');await renderRoute();
+      });
+  }catch(error){toast(error.message);}
 }
 async function viewCopies(book) {
+  const key=++detailRequest,version=routeVersion;
   try {
     const copies=await api('/ejemplares?libro='+book.id);
+    if(key!==detailRequest || version!==routeVersion)return;
     showModal(book.titulo,`<p class="help">${esc(book.autores||'Autor sin registrar')} · ${esc(book.editorial||'Editorial sin registrar')}</p>
-      ${copies.length?`<div class="table-wrap"><table><thead><tr><th>Código</th><th>Condición</th><th>Disponibilidad</th></tr></thead><tbody>${copies.map(c=>`<tr><td>${esc(c.codigo)}</td><td>${esc(c.condicion)}</td><td><span class="badge ${c.disponible?'':'neutral'}">${c.disponible?'Disponible':'No disponible'}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Sin copias registradas')}
+      <p class="help">Origen de los datos: ${book.origen_datos==='google_books'?'Google Books (revisados al registrar)':'ingreso manual'}.</p>
+      ${copies.length?`<div class="table-wrap"><table><thead><tr><th>Código</th><th>Condición</th><th>Disponibilidad</th><th></th></tr></thead><tbody>${copies.map(c=>`<tr><td>${esc(c.codigo)}</td><td>${esc(c.condicion)}</td><td><span class="badge ${c.disponible?'':'neutral'}">${c.disponible?'Disponible':'No disponible'}</span></td><td><button class="text-button" data-copy-history="${c.ejemplar_id}">Historial</button></td></tr>`).join('')}</tbody></table></div>`:empty('Sin copias registradas')}
       <div class="dialog-foot"><button class="button" id="add-copy">＋ Agregar copia</button></div>`);
     $('#add-copy').onclick=()=>addCopy(book);
+    $$('[data-copy-history]',dialog).forEach(b=>b.onclick=()=>historyModal('ejemplares',Number(b.dataset.copyHistory)));
   }catch(e){toast(e.message);}
 }
 function addCopy(book) {
@@ -98,9 +171,63 @@ async function usersPage(version) {
     `<div class="toolbar">${search('Buscar por nombre o identificación')}<span class="count" id="result-count"></span></div><div id="user-results"></div>`;
   const render=term=>{
     const list=filterRows(users,term,['nombre','identificador']);$('#result-count').textContent=`${list.length} usuarios`;
-    $('#user-results').innerHTML=list.length?`<div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Tipo / curso</th><th>Correo</th><th>Pendientes</th><th></th></tr></thead><tbody>${list.map(u=>`<tr><td><strong>${esc(u.nombre)}</strong><small>${esc(u.identificador)}${u.activo?'':' · Inactivo'}</small></td><td>${types[u.tipo]}<small>${esc(u.curso?u.curso+' · '+u.anio_escolar:u.cargo||'')}</small></td><td>${esc(u.correo||'Sin registrar')}</td><td><span class="badge ${u.pendientes?'warn':'neutral'}">${u.pendientes} ejemplares</span></td><td><button class="text-button" data-user="${u.id}">Editar</button></td></tr>`).join('')}</tbody></table></div>`:empty('No encontramos usuarios','Revisa la búsqueda o registra una nueva persona.');
+    $('#user-results').innerHTML=list.length?`<div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Tipo / curso</th><th>Correo</th><th>Pendientes</th><th></th></tr></thead><tbody>${list.map(u=>`<tr><td><strong>${esc(u.nombre)}</strong><small>${esc(u.identificador)}${u.activo?'':' · Inactivo'}</small>${u.sancion_hasta?`<small class="sanction-label">Conducta grave: bloqueo hasta ${fmt(u.sancion_hasta)}</small>`:''}</td><td>${types[u.tipo]}<small>${esc(u.curso?u.curso+' · '+u.anio_escolar:u.cargo||'')}</small></td><td>${esc(u.correo||'Sin registrar')}</td><td><span class="badge ${u.pendientes?'warn':'neutral'}">${u.pendientes} ejemplares</span></td><td><div class="actions"><button class="text-button" data-user="${u.id}">Editar</button><button class="text-button" data-sanctions="${u.id}">Sanciones</button><button class="text-button" data-user-history="${u.id}">Historial</button></div></td></tr>`).join('')}</tbody></table></div>`:empty('No encontramos usuarios','Revisa la búsqueda o registra una nueva persona.');
     $$('[data-user]').forEach(btn=>btn.onclick=()=>userForm(users.find(u=>u.id===Number(btn.dataset.user))));
+    $$('[data-sanctions]').forEach(btn=>btn.onclick=()=>sanctionsModal(Number(btn.dataset.sanctions)));
+    $$('[data-user-history]').forEach(btn=>btn.onclick=()=>historyModal('usuarios',Number(btn.dataset.userHistory)));
   };render('');watchSearch(render);$('#add-user').onclick=()=>userForm();$('#add-course').onclick=courseForm;
+}
+async function historyModal(type,id) {
+  const key=++detailRequest,version=routeVersion;
+  try {
+    const info=await api('/'+type+'/'+id+'/historial');
+    if(key!==detailRequest || version!==routeVersion)return;
+    const isUser=type==='usuarios';
+    showModal(isUser?'Historial del usuario':'Historial del ejemplar',`
+      <div class="notice"><strong>${esc(isUser?info.sujeto.nombre:info.sujeto.titulo)}</strong>${esc(isUser?info.sujeto.identificador:info.sujeto.codigo)}</div>
+      <p class="help">Movimientos por ejemplar, del préstamo más reciente al más antiguo. Los títulos y nombres corresponden al catálogo y usuarios actuales; el curso corresponde al momento del préstamo.</p>
+      ${info.movimientos.length?info.movimientos.map(m=>{
+        const i=m.incidencia,d=m.devolucion;
+        const status=d?'Devuelto':i?(i.fecha_resolucion?'Incidencia resuelta':'Incidencia pendiente'):'Préstamo abierto';
+        return `<details class="history-entry"><summary><strong>Préstamo Nº ${m.prestamo_id} · ${esc(m.codigo)}</strong><br>${esc(isUser?m.titulo:m.nombre)} · ${fmt(m.fecha)}<br><span class="badge ${m.fecha_cierre?'neutral':'warn'}">${status}</span></summary>
+          <p class="help">${esc(m.nombre)} · ${esc(m.identificador)}<br>${esc(m.titulo)}<br>Curso al prestar: ${esc(m.curso_al_prestar?m.curso_al_prestar+' · '+m.anio_escolar:'No corresponde')}</p>
+          <p>Préstamo: ${fmt(m.fecha)}<br>Vencimiento inicial: ${fmt(m.vencimiento_inicial)}<br>Último vencimiento: ${fmt(m.vencimiento_vigente)}</p>
+          ${m.renovaciones.length?`<p><strong>Renovaciones</strong></p><ul>${m.renovaciones.map(r=>`<li>${fmt(r.fecha)}: del ${fmt(r.vencimiento_anterior)} al ${fmt(r.nuevo_vencimiento)}</li>`).join('')}</ul>`:'<p class="help">Sin renovaciones.</p>'}
+          ${d?`<p><strong>Devolución Nº ${d.id}</strong><br>${fmt(d.fecha)} · ${d.condicion==='desgastado'?'Desgastado':'Bueno'}<br>${esc(d.observaciones||'Sin observaciones')}</p>`:''}
+          ${i?`<p><strong>${i.tipo==='perdida'?'Pérdida':'Daño permanente'}</strong><br>${fmt(i.fecha)} · ${esc(i.observaciones||'Sin observaciones')}</p>
+            ${i.fecha_resolucion?`<p>Resuelta el ${fmt(i.fecha_resolucion)} por ${i.solucion==='reposicion'?`reposición: ${esc(i.codigo_reemplazo)}`:`reembolso: ${esc(i.monto_reembolso)} CLP`}.</p>`:'<p class="help">Reposición o reembolso pendiente.</p>'}`:''}
+        </details>`;
+      }).join(''):empty('Sin movimientos registrados')}
+      ${isUser?'<p class="help">Las sanciones por conducta grave se consultan desde el botón Sanciones de este usuario.</p>':''}`);
+  }catch(error){toast(error.message);}
+}
+async function sanctionsModal(uid) {
+  const key=++detailRequest,version=routeVersion;
+  try {
+    const info=await api('/usuarios/'+uid+'/sanciones');if(version!==routeVersion || key!==detailRequest)return;
+    showModal('Sanciones por conducta grave',`<p><strong>${esc(info.usuario.nombre)}</strong><br><span class="help">${esc(info.usuario.identificador)}</span></p>
+      <p class="help">Aquí se registran decisiones ya comunicadas por el colegio. Los atrasos y las incidencias generan otros bloqueos independientes.</p>
+      ${info.sanciones.length?`<div class="table-wrap"><table><thead><tr><th>Inicio</th><th>Habilitado desde</th><th>Estado / motivo</th></tr></thead><tbody>${info.sanciones.map(s=>`<tr><td>${fmt(s.inicio)}</td><td>${fmt(s.habilitado_desde)}</td><td><span class="badge ${s.estado==='vigente'?'warn':'neutral'}">${({vigente:'Vigente',finalizada:'Finalizada',programada:'Programada'})[s.estado]}</span><small>${esc(s.observaciones||'Sin observaciones')}</small></td></tr>`).join('')}</tbody></table></div>`:empty('Sin sanciones por conducta grave')}
+      ${info.impedimento?`<div class="notice warn">No se puede registrar una sanción hoy: ${esc(info.impedimento)}.</div>`:''}
+      <div class="dialog-foot"><button class="button" type="button" id="new-sanction" ${info.puede_registrar?'':'disabled'}>Registrar sanción</button></div>`);
+    $('#new-sanction').onclick=()=>sanctionForm(info);
+  } catch(error) {toast(error.message);}
+}
+function sanctionForm(info) {
+  const active=info.sanciones.filter(s=>s.estado==='vigente');
+  showModal('Registrar sanción por conducta grave',`<form>
+    <div class="notice"><strong>${esc(info.usuario.nombre)}</strong>${esc(info.usuario.identificador)}</div>
+    <div class="summary-line"><span>Inicio del bloqueo</span><strong>${fmt(info.inicio)}</strong></div>
+    <div class="summary-line"><span>Esta sanción termina el</span><strong>${fmt(info.habilitado_desde)}</strong></div>
+    <p class="help">Dos semanas desde hoy. Los feriados internos cuentan; si el término cae en un día cerrado, se desplaza al siguiente día de atención.</p>
+    ${active.length?'<div class="notice warn">Esta persona ya tiene una sanción vigente. Registra otra solamente si corresponde a una nueva decisión del colegio.</div>':''}
+    ${field('observaciones','Motivo de la sanción','<textarea id="observaciones" name="observaciones" maxlength="1000" required placeholder="Describe brevemente la decisión comunicada por el colegio."></textarea>')}
+    <p class="help">Se bloquearán los nuevos préstamos. Las devoluciones seguirán permitidas en días de atención. Al terminar esta sanción, los atrasos, incidencias y demás bloqueos seguirán aplicándose si están pendientes.</p>
+    ${actions('Confirmar sanción')}</form>`,async data=>{
+      const result=await post('/sanciones',{usuario_id:info.usuario.id,observaciones:data.observaciones,inicio_esperado:info.inicio,habilitado_desde_esperado:info.habilitado_desde});
+      toast(result.repetida?'Esta sanción ya estaba registrada; se conservó un solo registro.':`Sanción registrada. Termina el ${fmt(result.habilitado_desde)}.`);
+      await renderRoute();
+    });
 }
 function courseForm() {
   showModal('Registrar curso',`<form><div class="fields">${input('nombre','Nombre del curso','',{max:80,help:'Por ejemplo: 3.º básico A.'})}${input('anio_escolar','Año escolar',context.fecha.slice(0,4),{type:'number'})}</div>${actions('Guardar curso')}</form>`,async data=>{await post('/cursos',data);await loadContext();toast('Curso registrado.');});
@@ -120,9 +247,31 @@ function userForm(user={}) {
   $('#tipo').onchange=sync;sync();
 }
 
-function userSelect(users) {return select('usuario','Seleccionar usuario',`<option value="">Busca y selecciona una persona</option>${users.map(u=>`<option value="${u.id}" ${selectedUser===u.id?'selected':''}>${esc(u.nombre)} · ${esc(u.identificador)}${u.activo?'':' (inactivo)'}</option>`).join('')}`);}
+function userOptions(users,current=selectedUser) {return `<option value="">Selecciona una persona</option>${users.map(u=>`<option value="${u.id}" ${current===u.id?'selected':''}>${esc(u.nombre)} · ${esc(u.identificador)}${u.activo?'':' (inactivo)'}</option>`).join('')}`;}
+function userSelect(users) {
+  return field('user-search','Buscar alumno o usuario','<input id="user-search" type="search" placeholder="Nombre o identificación" autocomplete="off" aria-controls="user-matches usuario"><small>Escribe parte del nombre o su identificación y selecciona el resultado.</small>')+
+    '<div id="user-search-status" class="help" role="status" aria-live="polite"></div><div id="user-matches" class="user-matches" hidden></div>'+
+    select('usuario','Usuario seleccionado',userOptions(users));
+}
+function bindUserSearch(users) {
+  const input=$('#user-search'),picker=$('#usuario'),matches=$('#user-matches'),status=$('#user-search-status');
+  input.oninput=()=>{
+    const term=input.value.trim(),list=filterRows(users,term,['nombre','identificador']);
+    // Buscar a otra persona invalida la selección y sus bloqueos consultados.
+    picker.innerHTML=userOptions(list,null);picker.dispatchEvent(new Event('change'));
+    status.textContent=term?(list.length?`${list.length} coincidencias${list.length>8?'. Afina la búsqueda o utiliza la lista inferior.':'. Selecciona una persona.'}`:'No hay usuarios que coincidan con la búsqueda.'):'';
+    matches.hidden=!term || !list.length;
+    matches.innerHTML=term?list.slice(0,8).map(u=>`<button type="button" class="user-match" data-match-user="${u.id}"><strong>${esc(u.nombre)}</strong><small>${esc(u.identificador)} · ${esc(types[u.tipo])}${u.activo?'':' · Inactivo'}</small></button>`).join(''):'';
+    $$('[data-match-user]',matches).forEach(button=>button.onclick=()=>{
+      picker.value=button.dataset.matchUser;picker.dispatchEvent(new Event('change'));picker.focus();
+    });
+  };
+  picker.addEventListener('change',()=>{
+    if(picker.value){matches.hidden=true;status.textContent='Usuario seleccionado: '+picker.selectedOptions[0].textContent;}
+  });
+}
 function userNotice(info) {
-  if(info.bloqueos.length)return `<div class="notice danger"><strong>Nuevos préstamos bloqueados</strong>${info.bloqueos.map(b=>esc(reasons[b.motivo]||b.motivo)).join('<br>')}</div>`;
+  if(info.bloqueos.length)return `<div class="notice danger"><strong>Nuevos préstamos bloqueados</strong>${info.bloqueos.map(b=>esc(reasons[b.motivo]||b.motivo)).join('<br>')}${info.sanciones_conducta?.length?`<br>Último término de sanción por conducta: ${fmt(info.sanciones_conducta.at(-1).habilitado_desde)}.`:''}</div>`;
   return `<div class="notice"><strong>${esc(info.usuario.nombre)}</strong>${info.prestamos.length} de 3 ejemplares pendientes.</div>`;
 }
 async function loans(version) {
@@ -161,6 +310,7 @@ async function loans(version) {
     try {const result=await post('/prestamos',{usuario_id:selectedUser,ejemplares:[...selected]});toast(`Préstamo Nº ${result.p_prestamo} registrado. Devolución: ${fmt(context.vencimiento)}.`);await renderRoute();}
     catch(e){$('#loan-error').textContent=e.message;saving=false;update();}
   };
+  bindUserSearch(users);
   if(selectedUser)$('#usuario').dispatchEvent(new Event('change'));
 }
 
@@ -177,7 +327,7 @@ async function returns(version) {
       const info=await api('/usuarios/'+selectedUser+'/resumen');if(key!==sequence||version!==routeVersion)return;
       const list=info.prestamos;
       $('#return-content').innerHTML=userNotice(info)+(list.length?`<div class="table-wrap"><table><thead><tr><th class="table-check"></th><th>Libro / ejemplar</th><th>Vencimiento</th><th>Renovaciones</th><th>Estado</th><th></th></tr></thead><tbody>${list.map(d=>`<tr><td><input type="checkbox" class="return-check" value="${d.detalle_id}" aria-label="Seleccionar ${esc(d.codigo)}" ${d.incidencia_id?'disabled':''}></td><td><strong>${esc(d.titulo)}</strong><small>${esc(d.codigo)} · Préstamo Nº ${d.prestamo_id}</small></td><td>${fmt(d.vencimiento)}</td><td>${d.cantidad_renovaciones} de 2</td><td><span class="badge ${d.incidencia_id?'neutral':d.atrasado?'warn':''}">${d.incidencia_id?'Incidencia':d.atrasado?'Atrasado':'Dentro del plazo'}</span></td><td>${!d.incidencia_id?`<button class="text-button" data-incident="${d.detalle_id}">Informar pérdida / daño</button>`:''}</td></tr>`).join('')}</tbody></table></div>
-      <div class="selection-bar"><span id="selected-count">0 ejemplares seleccionados</span><div class="actions"><button class="button secondary" id="renew" disabled>Renovar selección</button><button class="button" id="return" disabled>Devolver selección</button></div></div><p class="history-note">Para daño permanente o pérdida, usa “Informar pérdida / daño”. Las devoluciones de esta pantalla registran ejemplares en buen estado.</p>`:empty('Sin ejemplares pendientes','Este usuario no tiene libros por devolver.'));
+      <div class="selection-bar"><span id="selected-count">0 ejemplares seleccionados</span><div class="actions"><button class="button secondary" id="renew" disabled>Renovar selección</button><button class="button" id="return" disabled>Devolver selección</button></div></div><p class="history-note">Al devolver, indica si cada ejemplar está bueno o desgastado. Para daño permanente o pérdida, usa “Informar pérdida / daño”.</p>`:empty('Sin ejemplares pendientes','Este usuario no tiene libros por devolver.'));
       if(!list.length)return;
       const chosen=()=>list.filter(d=>$$('.return-check:checked').some(c=>Number(c.value)===d.detalle_id));
       const update=()=>{const sel=chosen();$('#selected-count').textContent=`${sel.length} ejemplares seleccionados`;
@@ -188,13 +338,13 @@ async function returns(version) {
       $('#renew').onclick=()=>confirmMovement('renovaciones',selectedUser,chosen());
       $$('[data-incident]').forEach(b=>b.onclick=()=>incidentForm(list.find(d=>d.detalle_id===Number(b.dataset.incident))));
     }catch(e){if(key===sequence&&version===routeVersion)$('#return-content').innerHTML=`<div class="notice danger">${esc(e.message)}</div>`;}
-  };if(selectedUser)$('#usuario').dispatchEvent(new Event('change'));
+  };bindUserSearch(users);if(selectedUser)$('#usuario').dispatchEvent(new Event('change'));
 }
 function confirmMovement(operation,user,list) {
   const isReturn=operation==='devoluciones';
   showModal(isReturn?'Confirmar devolución':'Confirmar renovación',`<form><p>${isReturn?'Se registrará la entrega de estos ejemplares:':'Se añadirán tres días hábiles desde el vencimiento vigente de cada ejemplar:'}</p><ul class="selected-books">${list.map(d=>`<li>${esc(d.titulo)} · ${esc(d.codigo)}</li>`).join('')}</ul>
-    ${isReturn?field('observaciones','Observaciones (opcional)','<textarea id="observaciones" name="observaciones" maxlength="1000"></textarea>'):'<p class="help">El sistema comprobará que el nuevo plazo no cruce las vacaciones.</p>'}${actions(isReturn?'Confirmar devolución':'Confirmar renovación')}</form>`,async data=>{
-      await post('/'+operation,{...data,usuario_id:user,detalles:list.map(d=>d.detalle_id)});toast(isReturn?'Devolución registrada.':'Renovación registrada.');await renderRoute();
+    ${isReturn?list.map(d=>select('condicion_'+d.detalle_id,`Estado recibido · ${esc(d.codigo)}`,`<option value="bueno" ${d.condicion==='desgastado'?'':'selected'}>Bueno</option><option value="desgastado" ${d.condicion==='desgastado'?'selected':''}>Desgastado, apto para préstamo</option>`)).join('')+field('observaciones','Observaciones (opcional)','<textarea id="observaciones" name="observaciones" maxlength="1000"></textarea>'):'<p class="help">El sistema comprobará que el nuevo plazo no cruce las vacaciones.</p>'}${actions(isReturn?'Confirmar devolución':'Confirmar renovación')}</form>`,async data=>{
+      await post('/'+operation,{observaciones:data.observaciones,usuario_id:user,detalles:list.map(d=>d.detalle_id),...(isReturn?{condiciones:list.map(d=>data['condicion_'+d.detalle_id])}:{})});toast(isReturn?'Devolución registrada.':'Renovación registrada.');await renderRoute();
     });
 }
 function incidentForm(detail) {
@@ -234,7 +384,99 @@ async function statsPage(version) {
   };$('#query-year').onclick=update;await update();
 }
 
-const routes={inicio:home,catalogo:catalog,usuarios:usersPage,prestamos:loans,devoluciones:returns,pendientes:pendingPage,estadisticas:statsPage};
+let calendarMonth;
+function calendarState(day) {
+  if(!day || day.configurado===false)return ['missing','Sin configurar'];
+  if(day.vacaciones)return ['vacation','Vacaciones'];
+  if(!day.abierto)return ['closed','Cerrado'];
+  if(!day.permite_prestamo && !day.permite_renovacion)return ['returns','Solo devoluciones'];
+  if(day.permite_prestamo && day.permite_renovacion)return ['open','Atención normal'];
+  return ['returns','Atención limitada'];
+}
+async function calendarPage(version) {
+  calendarMonth ||= context.fecha.slice(0,7);
+  main.innerHTML=heading('Calendario de atención','Configura los días que se utilizan para calcular préstamos, renovaciones y sanciones.',
+    '<button class="button" id="configure-period">＋ Configurar período</button>')+
+    `<div class="toolbar">${field('calendar-month','Mes',`<input id="calendar-month" type="month" min="2000-01" max="9998-12" value="${calendarMonth}">`)}
+    <button class="button secondary" id="complete-year">Completar días faltantes del año</button></div>
+    <div class="notice"><strong>Planifica antes de prestar</strong>Los días pasados son de solo lectura. Si un cambio afecta fechas utilizadas en préstamos o sanciones, se rechazará para conservar sus condiciones.</div>
+    <div id="calendar-results"></div>`;
+  let sequence=0;
+  const update=async()=>{
+    const key=++sequence,month=$('#calendar-month').value;
+    $('#calendar-results').innerHTML='<p class="help">Consultando calendario…</p>';
+    try {
+      const data=await api('/calendario?mes='+encodeURIComponent(month));if(key!==sequence||version!==routeVersion)return;
+      calendarMonth=month;
+      $('#complete-year').disabled=Number(month.slice(0,4))<Number(context.fecha.slice(0,4));
+      const offset=(new Date(month+'-01T12:00:00Z').getUTCDay()+6)%7;
+      const missing=data.dias.filter(d=>!d.configurado).length;
+      $('#calendar-results').innerHTML=`${missing?`<div class="notice warn">Hay ${missing} días sin configurar en este mes. Completa los días faltantes y luego registra feriados y vacaciones.</div>`:''}
+        <div class="calendar-legend">${[['open','Atención normal'],['returns','Solo devoluciones'],['closed','Cerrado'],['vacation','Vacaciones'],['missing','Sin configurar']].map(([kind,label])=>`<span><i class="calendar-dot ${kind}" aria-hidden="true"></i>${label}</span>`).join('')}</div>
+        <div class="calendar-grid">${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d=>`<div class="calendar-weekday">${d}</div>`).join('')}
+        ${'<div aria-hidden="true"></div>'.repeat(offset)}${data.dias.map(day=>{
+          const [kind,label]=calendarState(day),past=day.fecha<data.hoy;
+          return `<button class="calendar-day ${kind}" type="button" data-calendar-day="${day.fecha}" ${past?'disabled':''} aria-label="${esc(fmt(day.fecha)+' · '+label+(past?' · Solo lectura':''))}" title="${esc(day.motivo||'Todavía no existe configuración')}"><strong>${Number(day.fecha.slice(-2))}</strong><span>${label}</span><small>${esc(day.motivo||'Configurar atención')}</small></button>`;
+        }).join('')}</div><p class="help">Selecciona un día para configurarlo. Los fines de semana permanecen cerrados en el horario normal.</p>
+        <section class="card calendar-history"><h2>Últimos cambios guardados</h2>${data.historial.length?`<div class="table-wrap"><table><thead><tr><th>Período</th><th>Motivo</th><th>Días</th></tr></thead><tbody>${data.historial.map(h=>`<tr><td>${fmt(h.desde)} → ${fmt(h.hasta)}</td><td>${esc(h.motivo)}</td><td>${h.cantidad}</td></tr>`).join('')}</tbody></table></div>`:'<p class="help">Todavía no se han guardado cambios desde esta pantalla.</p>'}</section>`;
+      $$('[data-calendar-day]').forEach(button=>button.onclick=()=>calendarForm({desde:button.dataset.calendarDay,hasta:button.dataset.calendarDay}));
+    } catch(error) {if(key===sequence && version===routeVersion)$('#calendar-results').innerHTML=`<div class="notice danger">${esc(error.message)}</div>`;}
+  };
+  $('#calendar-month').onchange=update;
+  $('#configure-period').onclick=()=>calendarForm();
+  $('#complete-year').onclick=()=>calendarForm({tipo:'completar',anio:calendarMonth.slice(0,4)});
+  await update();
+}
+function calendarForm(initial={}) {
+  const completing=initial.tipo==='completar';
+  showModal(completing?'Completar días faltantes':'Configurar período',`<form>
+    ${completing?`<div class="notice">Agrega solo fechas que faltan, desde hoy en adelante. Propone atención de lunes a viernes y fines de semana cerrados. Conserva todos los días ya configurados. Después debes indicar los feriados y vacaciones del colegio.</div>
+      ${input('anio','Año',initial.anio,{type:'number'})}<input type="hidden" name="tipo" value="completar">`:
+      `<div class="fields">${input('desde','Desde',initial.desde||context.fecha,{type:'date'})}${input('hasta','Hasta',initial.hasta||initial.desde||context.fecha,{type:'date'})}
+      ${select('tipo','Tipo de atención','<option value="normal">Atención normal</option><option value="cerrado">Feriado o cierre</option><option value="solo_devoluciones">Solo devoluciones</option><option value="vacaciones">Vacaciones</option>')}
+      ${input('motivo','Motivo','',{max:250,full:true,help:'Por ejemplo: feriado del colegio o vacaciones de invierno.'})}
+      <div class="field full" id="last-week-field" hidden>${input('ultima_semana','Lunes de la última semana de clases','',{type:'date',required:false,help:'Esa semana, de lunes a viernes, quedará solo para devoluciones. Se conservan sus feriados y cierres; no se cambian días pasados.'})}</div></div>
+      <p class="help">“Solo devoluciones” conserva los días cerrados. “Atención normal” reemplaza la configuración del período; revisa los cambios para evitar reabrir un feriado.</p>`}
+    <div id="calendar-preview"></div>${actions('Revisar cambios')}</form>`);
+  const form=$('form',dialog),submit=$('button[type=submit]',form),error=$('.form-error',form),previewBox=$('#calendar-preview',form);
+  let preview=null;
+  const invalidate=()=>{preview=null;previewBox.innerHTML='';error.textContent='';submit.textContent='Revisar cambios';submit.disabled=false;};
+  form.oninput=invalidate;
+  if(completing) {form.elements.anio.min=context.fecha.slice(0,4);form.elements.anio.max='9998';}
+  else {
+    form.elements.desde.min=context.fecha;form.elements.hasta.min=context.fecha;
+    form.elements.tipo.onchange=()=>{
+      invalidate();const vacation=form.elements.tipo.value==='vacaciones';
+      $('#last-week-field',form).hidden=!vacation;form.elements.ultima_semana.required=vacation;
+    };
+  }
+  form.onsubmit=async event=>{
+    event.preventDefault();if(modalBusy)return;
+    if(preview && (preview.conflictos.length || !preview.cambios.length))return;
+    const data=Object.fromEntries(new FormData(form));
+    const controls=$$('input,select,button',form);
+    modalBusy=true;controls.forEach(control=>control.disabled=true);error.textContent='';submit.textContent=preview?'Guardando…':'Revisando…';
+    try {
+      if(!preview) {
+        preview=await post('/calendario/previsualizar',data);
+        previewBox.innerHTML=`<div class="notice"><strong>${preview.cambios.length} días cambiarán</strong>${preview.resumen.nuevos} nuevos y ${preview.resumen.actualizados} actualizados. Todavía no se ha guardado nada.</div>
+          ${preview.conflictos.length?`<div class="notice danger"><strong>Hay fechas protegidas. Ajusta el período.</strong>${preview.conflictos.map(c=>`${fmt(c.fecha)}: ${esc(c.motivo)}`).join('<br>')}</div>`:''}
+          ${preview.cambios.length?`<div class="table-wrap calendar-review"><table><thead><tr><th>Fecha</th><th>Antes</th><th>Después</th></tr></thead><tbody>${preview.cambios.map(c=>`<tr><td>${fmt(c.fecha)}</td><td>${calendarState(c.antes)[1]}<small>${esc(c.antes?.motivo||'')}</small></td><td>${calendarState(c.despues)[1]}<small>${esc(c.despues.motivo)}</small></td></tr>`).join('')}</tbody></table></div>`:''}`;
+      } else {
+        const result=await post('/calendario/configurar',{...data,version:preview.version});
+        calendarMonth=completing?data.anio+'-01':data.desde.slice(0,7);
+        toast(`Calendario actualizado: ${result.guardados} días guardados.`);dialog.close();await renderRoute();
+      }
+    } catch(e) {error.textContent=e.message;preview=null;previewBox.innerHTML='';}
+    finally {
+      modalBusy=false;controls.forEach(control=>control.disabled=false);
+      submit.textContent=preview?'Confirmar cambios':'Revisar cambios';
+      submit.disabled=Boolean(preview && (preview.conflictos.length || !preview.cambios.length));
+    }
+  };
+}
+
+const routes={inicio:home,catalogo:catalog,usuarios:usersPage,prestamos:loans,devoluciones:returns,pendientes:pendingPage,estadisticas:statsPage,calendario:calendarPage};
 async function renderRoute() {
   const version=++routeVersion;
   window.scrollTo(0,0);
@@ -243,7 +485,7 @@ async function renderRoute() {
   main.innerHTML='<div class="loading" role="status">Cargando…</div>';
   try {
     await loadContext();if(version!==routeVersion)return;
-    document.title=({inicio:'Inicio',catalogo:'Catálogo',usuarios:'Usuarios',prestamos:'Nuevo préstamo',devoluciones:'Devoluciones',pendientes:'Pendientes',estadisticas:'Estadísticas'}[route]||'Inicio')+' · Biblioteca escolar';
+    document.title=({inicio:'Inicio',catalogo:'Catálogo',usuarios:'Usuarios',prestamos:'Nuevo préstamo',devoluciones:'Devoluciones',pendientes:'Pendientes',estadisticas:'Estadísticas',calendario:'Calendario'}[route]||'Inicio')+' · Biblioteca escolar';
     await (routes[route]||home)(version);
   } catch(e) {if(version!==routeVersion)return;main.innerHTML=`${heading('No pudimos cargar la biblioteca','Revisa que la aplicación esté abierta en la terminal.')}<div class="notice danger">${esc(e.message)}</div><button class="button" id="retry">Volver a intentar</button>`;$('#retry').onclick=renderRoute;}
 }

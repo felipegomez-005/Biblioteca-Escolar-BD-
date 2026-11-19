@@ -2,7 +2,7 @@
 
 Base independiente de desarrollo para el proyecto semestral. Usa SQL de PostgreSQL y datos ficticios para probar catálogo, préstamos, devoluciones, renovaciones y sanciones. La biblioteca real utiliza un sistema que identificó como ABIES; su versión y sus mecanismos de integración siguen pendientes de comprobar.
 
-**Esta versión no está conectada a ABIES ni modifica sus datos.** Ya incluye una aplicación web local y una API HTTP para trabajar con la base. La consulta a Google Books y el envío efectivo de correos son próximas etapas. Se incluyen campos para la procedencia bibliográfica y una cola de avisos pendientes.
+**Esta versión no está conectada a ABIES ni modifica sus datos.** Ya incluye una aplicación web local y una API HTTP para trabajar con la base. La consulta por ISBN a Google Books está implementada y verificada con una consulta real, revisión y guardado desde el formulario. Cada instalación debe configurar su clave local según la guía. El envío efectivo de correos continúa pendiente.
 
 ## Abrir la aplicación
 
@@ -17,21 +17,32 @@ Después abre **http://127.0.0.1:3000**. Mantén la terminal abierta; para deten
 La interfaz permite:
 
 - Registrar libros, autores, géneros y copias físicas; buscar por título, autor o ISBN.
+- Editar los datos de una edición existente conservando sus copias y movimientos.
+- Buscar un ISBN en Google Books, seleccionar una propuesta, revisar sus datos y guardarla. Si el libro ya existe, permite ir a sus copias. [Configuración y prueba paso a paso](docs/google-books.md).
 - Registrar cursos y usuarios, editar sus datos y desactivarlos conservando el historial.
+- Registrar sanciones por conducta grave desde Usuarios → Sanciones, revisar su plazo y consultar su historial. [Uso y límites](docs/sanciones.md).
 - Registrar préstamos y consultar bloqueos, cupo y vencimiento.
+- Buscar a la persona por nombre o identificación y seleccionarla directamente en préstamos y devoluciones.
 - Devolver parcialmente o renovar los ejemplares seleccionados.
+- Elegir la condición recibida (bueno o desgastado) de cada ejemplar al devolverlo.
+- Consultar el historial de circulación desde Usuarios → Historial o Catálogo → Ver copias → Historial.
 - Registrar pérdidas/daños permanentes y resolver incidencias por reposición o reembolso recibido.
 - Consultar pendientes y estadísticas anuales.
+- Administrar el calendario mensual, feriados, vacaciones y períodos de solo devoluciones, con revisión previa e historial. [Uso y prueba del calendario](docs/calendario.md).
 
-Las devoluciones normales se registran en buen estado; los daños permanentes se gestionan como incidencias. La interfaz no registra sanciones graves manuales todavía, pero sí muestra y aplica las existentes en la base. No se envían correos ni se realizan pagos desde la aplicación.
+Las devoluciones permiten registrar ejemplares buenos o desgastados; los daños permanentes se gestionan como incidencias. Las sanciones por conducta grave bloquean nuevos préstamos durante dos semanas y conservan su historial al finalizar. No se envían correos ni se realizan pagos desde la aplicación.
 
 La API escucha solamente en `127.0.0.1`. Es una aplicación local de prueba, sin cuentas de acceso de bibliotecarios ni despliegue público. [Documentación de la API](docs/api.md).
 
 Mientras esté abierta, no ejecutes `db:resumen` ni `db:sql` contra la misma base: PGlite permite un solo proceso propietario. `npm.cmd test` sí se puede ejecutar, porque utiliza bases temporales independientes.
 
+## Copias de seguridad
+
+Con la aplicación detenida, `npm.cmd run db:backup` crea y verifica una copia en `.local/respaldos/`. Para comprobarla: `npm.cmd run db:verificar -- "ruta-del-archivo.biblioteca"`. Para restaurarla en una carpeta nueva: `npm.cmd run db:restaurar -- "ruta-del-archivo.biblioteca"`. La restauración conserva intacta la base activa. [Instrucciones y activación manual](docs/respaldos.md).
+
 ## Comenzar en VSCode
 
-Abra la terminal en esta carpeta. Requiere Node.js 20 o posterior.
+Abra la terminal en esta carpeta. Requiere Node.js 20.12 o posterior.
 
 ```powershell
 npm.cmd ci
@@ -42,6 +53,8 @@ npm.cmd run db:sql -- sql/05_consultas.sql
 ```
 
 En este equipo la dependencia ya fue instalada y la base local inicializada. `db:init` se ejecuta una sola vez: si la base existe se detiene, sin borrar ni reemplazar datos.
+
+Al reiniciar con `npm.cmd start`, una base existente recibe automáticamente las actualizaciones del historial de calendario y del procedimiento de devolución con condiciones. No se reemplazan sus fechas ni movimientos.
 
 En Windows usamos `npm.cmd` para evitar que PowerShell intente ejecutar `npm.ps1` si su política bloquea scripts. No hace falta cambiar esa política.
 
@@ -58,11 +71,18 @@ Las pruebas crean otra base en memoria y no modifican la copia local. Esta opci�
 | `sql/03_operaciones.sql` | Procedimientos, indicadores y vistas. |
 | `sql/04_datos_demo.sql` | Personas, libros y movimientos completamente ficticios. |
 | `sql/05_consultas.sql` | Consultas para estudiar los resultados. |
+| `sql/06_administracion_calendario.sql` | Actualización aditiva: historial de cambios del calendario. |
+| `sql/07_devolucion_condiciones.sql` | Procedimiento de devolución con condición individual por ejemplar. |
 | `docs/reglas-y-decisiones.md` | Reglas confirmadas, convenciones de implementación y alcance pendiente. |
 | `docs/modelo.md` | Diagrama relacional y explicación de las tablas. |
 | `docs/pruebas.md` | Casos de prueba y límites de la verificación. |
 | `tests/biblioteca.test.mjs` | Pruebas automáticas ejecutables. |
 | `tests/api.test.mjs` | Pruebas HTTP de consultas, formularios y operaciones. |
+| `tests/calendar.test.mjs` | Pruebas de períodos, vacaciones, feriados, conflictos y actualización aditiva. |
+| `tests/sanctions.test.mjs` | Pruebas del registro de sanciones, plazos, bloqueos, reintentos y validaciones. |
+| `tests/administration.test.mjs` | Verificación conjunta de edición del catálogo, historial y condiciones de devolución. |
+| `scripts/backup.mjs` | Comandos de respaldo, comprobación y restauración independiente. |
+| `tests/backup.test.mjs` | Integridad, persistencia, secuencias y rechazo de sobrescrituras o bases ocupadas. |
 | `web/` | Pantallas, estilos y comportamiento de los formularios. |
 | `server/` | Servidor local, rutas de la API y validaciones. |
 | `docs/api.md` | Instrucciones de uso, endpoints y alcance de la aplicación. |
@@ -77,6 +97,8 @@ psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/01_esquema.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/02_reglas.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/03_operaciones.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/04_datos_demo.sql
+psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/06_administracion_calendario.sql
+psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/07_devolucion_condiciones.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/05_consultas.sql
 ```
 
@@ -114,9 +136,9 @@ Los estudiantes usan identificadores `DEMO-EST-*` y correos `example.invalid`. N
 
 ## Próximas etapas
 
-1. Validar las convenciones del documento de reglas y el calendario real.
+1. Completar la comprobación visual del administrador de calendario y cargar fechas validadas del colegio. Las pruebas automáticas del calendario ya pasaron. Validar también las convenciones del documento de reglas.
 2. Documentar las capturas y demostración de la API de consulta ya implementada.
-3. Implementar búsqueda bibliográfica por ISBN, revisión del resultado e ingreso manual alternativo.
+3. Mantener la clave de Google Books configurada localmente. La búsqueda real, revisión y guardado ya se verificaron; repetir la comprobación al instalar en otro equipo.
 4. Configurar envío de avisos, frecuencia, remitente y cancelación de avisos que ya no correspondan.
 5. Verificar versión, permisos y opciones de intercambio de ABIES; acordar qué sistema mantiene cada dato.
 6. Completar el informe académico: transformación paso a paso, normalización formal, decisiones asociadas a KPIs y capturas de pruebas.

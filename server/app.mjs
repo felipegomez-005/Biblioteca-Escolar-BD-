@@ -2,6 +2,11 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { root } from '../scripts/db.mjs';
+import { CatalogError,createGoogleBooks,normalizeIsbn,isbnVariants } from './google-books.mjs';
+import { CalendarError,readCalendar,previewCalendar,saveCalendar } from './calendar.mjs';
+import { SanctionError,readSanctions,registerSanction } from './sanctions.mjs';
+import {readBook,editBook} from './catalog-edit.mjs';
+import {readHistory} from './history.mjs';
 
 class InputError extends Error { constructor(message,status=400) { super(message); this.status=status; } }
 function text(value,label,max=250,required=true) {
@@ -47,7 +52,7 @@ async function body(req) {
   } catch { throw new InputError('No se pudo leer el formulario.'); }
 }
 function friendly(error) {
-  if(error instanceof InputError) return {status:error.status,message:error.message};
+  if(error instanceof InputError || error instanceof CatalogError || error instanceof CalendarError || error instanceof SanctionError) return {status:error.status,message:error.message};
   if(error.code==='23505') return {status:409,message:'Ya existe un registro con ese ISBN, código o identificación. Revise los datos antes de guardar.'};
   if(error.code==='23503' || error.code==='P0002') return {status:404,message:'El registro seleccionado ya no está disponible. Actualice la página.'};
   if(error.code==='23514' || error.code==='23502') return {status:400,message:'Revise los campos obligatorios y sus valores.'};
@@ -56,7 +61,7 @@ function friendly(error) {
   return {status:500,message:'No se pudo completar la operación. Los cambios de esta operación no se guardaron.'};
 }
 
-export function createApp(db,{today}={}) {
+export function createApp(db,{today,googleBooks=createGoogleBooks()}={}) {
   const q=async(sql,args=[]) => (await db.query(sql,args)).rows;
   const date=async()=>today || (await q('SELECT CURRENT_DATE::text AS fecha'))[0].fecha;
   let tail=Promise.resolve();
@@ -65,6 +70,42 @@ export function createApp(db,{today}={}) {
 
   async function api(method,url,b) {
     const p=url.pathname, d=await date();
+    const history=p.match(/^\/api\/(usuarios|ejemplares)\/(\d+)\/historial$/);
+    if(method==='GET' && history)return readHistory(db,history[1],id(history[2]));
+    const edit=p.match(/^\/api\/libros\/(\d+)$/);
+    if(method==='GET' && edit)return readBook(db,id(edit[1]));
+    if(method==='PATCH' && edit) {
+      let publication=null;
+      if(b.anio_publicacion!==null && b.anio_publicacion!==undefined && b.anio_publicacion!=='') {
+        publication=id(b.anio_publicacion,'Año de publicación');
+        if(publication>9999)throw new InputError('Año de publicación inválido.');
+      }
+      return editBook(db,id(edit[1]),{
+        titulo:text(b.titulo,'Título'),isbn:normalizeIsbn(b.isbn,{optional:true}),
+        editorial:text(b.editorial,'Editorial',150,false),anio_publicacion:publication,
+        autores:(text(b.autores,'Autores',1000,false)||'').split(';').map(s=>s.trim()).filter(Boolean),
+        generos:(text(b.generos,'Géneros',500,false)||'').split(';').map(s=>s.trim()).filter(Boolean),
+        version:text(b.version,'Versión del libro',64)
+      });
+    }
+    const sanctionUser=p.match(/^\/api\/usuarios\/(\d+)\/sanciones$/);
+    if(method==='GET' && sanctionUser) return readSanctions(db,id(sanctionUser[1]),d);
+    if(method==='POST' && p==='/api/sanciones') return registerSanction(db,{
+      usuario_id:id(b.usuario_id),observaciones:text(b.observaciones,'Motivo de la sanción',1000),
+      inicio_esperado:text(b.inicio_esperado,'Fecha de inicio revisada',10),
+      habilitado_desde_esperado:text(b.habilitado_desde_esperado,'Fecha de término revisada',10)
+    },d);
+    if(method==='GET' && p==='/api/calendario') return readCalendar(db,url.searchParams.get('mes')||d.slice(0,7),d);
+    if(method==='POST' && p==='/api/calendario/previsualizar') return previewCalendar(db,b,d);
+    if(method==='POST' && p==='/api/calendario/configurar') return saveCalendar(db,b,d);
+    if(method==='GET' && p==='/api/libros/isbn') {
+      const isbn=normalizeIsbn(url.searchParams.get('isbn'));
+      const existing=(await q(`SELECT l.id,l.titulo,l.isbn,l.origen_datos,e.nombre AS editorial,
+        coalesce((SELECT string_agg(a.nombre,' · ' ORDER BY a.nombre) FROM biblioteca.libro_autor la JOIN biblioteca.autor a ON a.id=la.autor_id WHERE la.libro_id=l.id),'') AS autores
+        FROM biblioteca.libro l LEFT JOIN biblioteca.editorial e ON e.id=l.editorial_id WHERE l.isbn=ANY($1::text[])`,[isbnVariants(isbn)]))[0];
+      if(existing) return {isbn,existente:existing,resultados:[]};
+      return {isbn,existente:null,resultados:await googleBooks.lookup(isbn)};
+    }
     if(method==='GET' && p==='/api/contexto') {
       const cal=(await q('SELECT * FROM biblioteca.calendario WHERE fecha=$1',[d]))[0]||null;
       let vencimiento=null;
@@ -103,9 +144,10 @@ export function createApp(db,{today}={}) {
     if(method==='GET' && p==='/api/usuarios') {
       const search='%'+(url.searchParams.get('q')||'').slice(0,150)+'%';
       return q(`SELECT u.*,c.nombre AS curso,c.anio_escolar,
+        (SELECT max(s.habilitado_desde)::text FROM biblioteca.sancion s WHERE s.usuario_id=u.id AND s.inicio<=$2 AND s.habilitado_desde>$2) AS sancion_hasta,
         (SELECT count(*)::integer FROM biblioteca.detalle_prestamo dp JOIN biblioteca.prestamo p ON p.id=dp.prestamo_id WHERE p.usuario_id=u.id AND dp.fecha_cierre IS NULL) AS pendientes
         FROM biblioteca.usuario u LEFT JOIN biblioteca.curso c ON c.id=u.curso_actual_id
-        WHERE u.nombre ILIKE $1 OR u.identificador ILIKE $1 ORDER BY u.nombre,u.id`,[search]);
+        WHERE u.nombre ILIKE $1 OR u.identificador ILIKE $1 ORDER BY u.nombre,u.id`,[search,d]);
     }
     const userMatch=p.match(/^\/api\/usuarios\/(\d+)\/resumen$/);
     if(method==='GET' && userMatch) {
@@ -113,7 +155,8 @@ export function createApp(db,{today}={}) {
       const user=(await q('SELECT * FROM biblioteca.usuario WHERE id=$1',[uid]))[0];
       if(!user) throw new InputError('Usuario no encontrado.',404);
       return {usuario:user,bloqueos:await q('SELECT DISTINCT motivo FROM biblioteca.motivos_bloqueo($1,$2)',[uid,d]),
-        prestamos:await q(`SELECT dp.id AS detalle_id,p.id AS prestamo_id,e.codigo,l.titulo,dp.vencimiento_vigente::text AS vencimiento,
+        sanciones_conducta:await q('SELECT id,habilitado_desde::text FROM biblioteca.sancion WHERE usuario_id=$1 AND inicio<=$2 AND habilitado_desde>$2 ORDER BY habilitado_desde',[uid,d]),
+        prestamos:await q(`SELECT dp.id AS detalle_id,p.id AS prestamo_id,e.codigo,e.condicion,l.titulo,dp.vencimiento_vigente::text AS vencimiento,
           dp.cantidad_renovaciones,dp.vencimiento_vigente<$2 AS atrasado,i.id AS incidencia_id,i.tipo AS incidencia,
           CASE WHEN dp.cantidad_renovaciones<2 AND dp.vencimiento_vigente>=$2 AND i.id IS NULL THEN true ELSE false END AS puede_renovar
           FROM biblioteca.detalle_prestamo dp JOIN biblioteca.prestamo p ON p.id=dp.prestamo_id
@@ -134,8 +177,13 @@ export function createApp(db,{today}={}) {
     }
     if(method==='POST' && p==='/api/libros') {
       const title=text(b.titulo,'Título'), publisher=text(b.editorial,'Editorial',150,false);
-      const isbn=text(b.isbn,'ISBN',30,false)?.replace(/[\s-]/g,'').toUpperCase()||null;
-      if(isbn && !/^(\d{13}|\d{9}[\dX])$/.test(isbn)) throw new InputError('ISBN: use 10 o 13 caracteres, sin letras salvo X final en ISBN-10.');
+      const isbn=normalizeIsbn(b.isbn,{optional:true});
+      const origin=oneOf(b.origen_datos||'manual',['manual','google_books'],'Origen de los datos');
+      const googleId=origin==='google_books'?text(b.google_books_id,'Identificador de Google Books',150):null;
+      if(origin==='google_books') googleBooks.validatePreview(b.consulta_id,isbn,googleId);
+      else if(b.google_books_id || b.consulta_id) throw new InputError('La procedencia del libro no coincide con sus datos. Repita la consulta.');
+      if(isbn && (await q('SELECT id FROM biblioteca.libro WHERE isbn=ANY($1::text[])',[isbnVariants(isbn)])).length)
+        throw new InputError('Este ISBN ya está en el catálogo. Abra «Ver copias» para agregar otro ejemplar.',409);
       const authors=(text(b.autores,'Autores',1000,false)||'').split(';').map(s=>s.trim()).filter(Boolean);
       const genres=(text(b.generos,'Géneros',500,false)||'').split(';').map(s=>s.trim()).filter(Boolean);
       let publication=null;
@@ -145,7 +193,7 @@ export function createApp(db,{today}={}) {
         const query=async(sql,args)=>(await tx.query(sql,args)).rows;
         let eid=null;
         if(publisher) eid=(await query('INSERT INTO biblioteca.editorial(nombre) VALUES($1) ON CONFLICT(nombre) DO UPDATE SET nombre=excluded.nombre RETURNING id',[publisher]))[0].id;
-        const book=(await query('INSERT INTO biblioteca.libro(titulo,isbn,editorial_id,anio_publicacion) VALUES($1,$2,$3,$4) RETURNING id',[title,isbn,eid,publication]))[0];
+        const book=(await query('INSERT INTO biblioteca.libro(titulo,isbn,editorial_id,anio_publicacion,origen_datos,google_books_id) VALUES($1,$2,$3,$4,$5,$6) RETURNING id',[title,isbn,eid,publication,origin,googleId]))[0];
         for(const name of [...new Set(authors)]) {
           const existing=(await query('SELECT id FROM biblioteca.autor WHERE nombre=$1 ORDER BY id LIMIT 1',[name]))[0];
           const author=existing||(await query('INSERT INTO biblioteca.autor(nombre) VALUES($1) RETURNING id',[name]))[0];
@@ -178,7 +226,13 @@ export function createApp(db,{today}={}) {
       const uid=id(b.usuario_id), selected=ids(b.detalles);
       const owned=await q('SELECT dp.id FROM biblioteca.detalle_prestamo dp JOIN biblioteca.prestamo p ON p.id=dp.prestamo_id WHERE dp.id=ANY($1) AND p.usuario_id=$2 AND dp.fecha_cierre IS NULL',[selected,uid]);
       if(owned.length!==selected.length) throw new InputError('La selección ya no corresponde a los préstamos abiertos de esta persona.',409);
-      if(p==='/api/devoluciones') return (await q('CALL biblioteca.sp_devolver($1,$2,$3,$4)',[uid,selected,d,text(b.observaciones,'Observaciones',1000,false)]))[0];
+      if(p==='/api/devoluciones') {
+        const observations=text(b.observaciones,'Observaciones',1000,false);
+        if(b.condiciones===undefined)return (await q('CALL biblioteca.sp_devolver($1,$2,$3,$4)',[uid,selected,d,observations]))[0];
+        if(!Array.isArray(b.condiciones) || b.condiciones.length!==selected.length)throw new InputError('Indique una condición por cada ejemplar seleccionado.');
+        const conditions=b.condiciones.map(c=>oneOf(c,['bueno','desgastado'],'Condición recibida'));
+        return (await q('CALL biblioteca.sp_devolver_condiciones($1,$2,$3,$4,$5)',[uid,selected,conditions,d,observations]))[0];
+      }
       await q('CALL biblioteca.sp_renovar($1,$2)',[selected,d]); return {renovados:selected.length};
     }
     if(method==='POST' && p==='/api/incidencias') {
