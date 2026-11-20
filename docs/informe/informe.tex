@@ -63,21 +63,21 @@ Este informe documenta el proyecto semestral de Bases de Datos realizado para la
 \section{Introducción}
 
 \subsection{Contexto y cliente}
-El cliente es el Colegio Siglo XXI de Lampa, y el proceso modelado corresponde a su biblioteca escolar, que actualmente opera con el sistema ABIES. Una bibliotecaria administra el catálogo y registra los movimientos, atendiendo a tres tipos de usuarios: estudiantes, docentes y asistentes de la educación. \pend{COMPLETAR POR EL GRUPO: confirmar si el colegio solicitó anonimato}.
+El cliente es el Colegio Siglo XXI de Lampa, y el proceso modelado corresponde a su biblioteca escolar, que actualmente opera con el sistema ABIES. Una bibliotecaria administra el catálogo y registra los movimientos, atendiendo a tres tipos de usuarios: estudiantes, docentes y asistentes de la educación. Se trata de un caso de estudio hipotético: el colegio sirve de escenario para el proyecto, pero no hubo una contraparte formal ni se usaron datos del establecimiento.
 
 En el funcionamiento actual se identificaron dos necesidades de mejora: (1) la carga manual de libros, pues el ingreso de título, autores y editorial requiere digitar toda la información; y (2) el seguimiento de atrasos, ya que resulta difícil identificar rápidamente los préstamos pendientes y vencidos.
 
 Todos los datos usados en este trabajo son sintéticos o ficticios, sin información real de estudiantes ni de otras personas, en cumplimiento de la Ley 21.719 de protección de datos personales (véase la Sección~\ref{sec:tratamiento}).
 
 \subsection{Enfoque}
-El trabajo se abordó como una mejora de una base existente, autorizada por la profesora según lo informado por el grupo. La propuesta se presentó en una presentación de avance que contiene el levantamiento del problema, la mejora propuesta, las reglas de negocio, el modelo entidad-relación en dos vistas, un caso de uso de devolución parcial y renovación, los indicadores anuales y el resultado esperado. A partir de ella se siguió el ciclo completo de diseño: levantamiento de requerimientos con la biblioteca, modelo conceptual (E-R), modelo lógico (relacional), normalización hasta 3FN, modelo físico en PostgreSQL con su poblamiento, y explotación mediante triggers, procedimientos almacenados y una API web. Cada etapa se verificó con pruebas sobre una base recién creada.
+El trabajo se abordó como una mejora de una base existente, autorizada por la profesora según lo informado por el grupo. La propuesta se presentó en una presentación de avance que contiene el levantamiento del problema, la mejora propuesta, las reglas de negocio, el modelo entidad-relación en dos vistas, un caso de uso de devolución parcial y renovación, los indicadores anuales y el resultado esperado. A partir de ella se siguió el ciclo completo de diseño: levantamiento de requerimientos del escenario, modelo conceptual (E-R), modelo lógico (relacional), normalización hasta 3FN, modelo físico en PostgreSQL con su poblamiento, y explotación mediante triggers, procedimientos almacenados y una API web. Cada etapa se verificó con pruebas sobre una base recién creada.
 
 \subsection{Objetivos}
 \textbf{Objetivo general.} Diseñar e implementar una base de datos relacional completa que responda a los requerimientos de la biblioteca escolar, documentando de forma clara y justificada cada decisión de diseño.
 
 \textbf{Objetivos específicos.}
 \begin{enumerate}[nosep]
-\item Levantar los requerimientos de información del cliente mediante entrevistas, documentando supuestos y reglas de negocio.
+\item Levantar los requerimientos de información del escenario, documentando supuestos y reglas de negocio.
 \item Construir un modelo entidad-relación con cardinalidad y opcionalidad justificadas.
 \item Traducirlo al modelo relacional y normalizarlo hasta 3FN.
 \item Implementar el modelo físico, poblarlo y dotarlo de triggers, procedimientos almacenados y una API de consulta.
@@ -85,7 +85,7 @@ El trabajo se abordó como una mejora de una base existente, autorizada por la p
 \end{enumerate}
 
 \subsection{Estructura del informe}
-La Sección~2 presenta el marco teórico. La Sección~3 detalla el desarrollo: requerimientos, modelos E-R, relacional y normalizado, modelo físico, triggers, procedimientos y API. La Sección~4 expone los resultados de las pruebas y los hallazgos, y la Sección~5 presenta la conclusión. Los anexos reúnen la evidencia del cliente y el código extenso.
+La Sección~2 presenta el marco teórico. La Sección~3 detalla el desarrollo: requerimientos, modelos E-R, relacional y normalizado, modelo físico, triggers, procedimientos y API. La Sección~4 expone los resultados de las pruebas y los hallazgos, y la Sección~5 presenta la conclusión. Los anexos explican el carácter hipotético del caso y remiten al código extenso.
 
 %------------------------------------------------------------
 \section{Marco teórico}
@@ -114,7 +114,7 @@ La Ley 21.719 regula el tratamiento de datos personales en Chile y crea la Agenc
 \subsection{Levantamiento de requerimientos}
 
 \subsubsection{El cliente y el proceso modelado}
-Colegio Siglo XXI de Lampa, biblioteca escolar. \pend{COMPLETAR: contraparte (nombre y cargo) y medio de contacto}. La biblioteca utiliza el sistema ABIES. Una bibliotecaria administra el catálogo y registra los movimientos, y atiende a estudiantes, docentes y asistentes de la educación.
+Colegio Siglo XXI de Lampa, biblioteca escolar. Como el caso es hipotético, no hay una contraparte formal: el papel del cliente lo cumple la bibliotecaria descrita en el escenario. La biblioteca utiliza el sistema ABIES. Una bibliotecaria administra el catálogo y registra los movimientos, y atiende a estudiantes, docentes y asistentes de la educación.
 
 La mejora propuesta consiste en una base de datos relacional que gestiona catálogo, ejemplares físicos y movimientos, integrada con un módulo que consulta por ISBN a la Google Books API para autocompletar datos bibliográficos (título, autores, editorial y otros campos). El registro de un libro tiene tres pasos:
 \begin{enumerate}[nosep]
@@ -125,40 +125,27 @@ La mejora propuesta consiste en una base de datos relacional que gestiona catál
 
 Google Books aporta los datos del libro; la base de la biblioteca conserva su inventario: catálogo, ejemplares, usuarios y movimientos. Los datos propios de cada copia física, como su código de inventario y su condición, se registran en la biblioteca. La integración externa es un servicio, no una tabla escolar ni una relación SQL con Google.
 
-\subsubsection{Reuniones y entrevistas}
-El detalle completo va en las minutas (Anexo~B).
-
-\begin{table}[h]
-\centering
-\caption{Reuniones realizadas.}
-\begin{tabularx}{\textwidth}{l l Y l}
-\toprule
-\textbf{Fecha} & \textbf{Tipo} & \textbf{Temas tratados} & \textbf{Minuta}\\
-\midrule
-\pend{COMPLETAR: dd/mm} & Con el cliente & \pend{COMPLETAR: temas} & M1\\
-\pend{COMPLETAR: dd/mm} & Interna & \pend{COMPLETAR: temas} & M2\\
-\bottomrule
-\end{tabularx}
-\end{table}
+\subsubsection{Levantamiento}
+No hubo reuniones ni entrevistas con un cliente real. El grupo definió los requerimientos a partir del enunciado del proyecto y los registró en la presentación de avance (reglas RN01 a RN09 e indicadores). Las reglas RN10 a RN19 se precisaron durante la implementación, cuando el código exigió decidir casos que la presentación no cubría.
 
 \subsubsection{Reglas de negocio}
 
 \begin{table}[h]
 \centering
-\caption{Reglas de negocio acordadas con el cliente.}
+\caption{Reglas de negocio del caso.}
 \begin{tabularx}{\textwidth}{l Y Y}
 \toprule
-\textbf{N.º} & \textbf{Regla de negocio} & \textbf{Fuente (reunión o correo, fecha)}\\
+\textbf{N.º} & \textbf{Regla de negocio} & \textbf{Fuente}\\
 \midrule
-RN01 & Los usuarios habilitados son estudiantes, docentes y asistentes de la educación. Un estudiante debe tener correo y curso; docentes y asistentes no tienen curso. Un usuario inactivo no puede pedir préstamos. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN02 & Máximo 3 ejemplares prestados simultáneamente por persona, considerando todos sus préstamos abiertos. El límite es el mismo para los tres tipos de usuario. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN03 & El plazo de préstamo inicial es de 3 días hábiles, contados desde la fecha del préstamo. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN04 & Solo puede existir un préstamo abierto por ejemplar físico, y solo se prestan ejemplares en condición buena o desgastada. Cada copia tiene un código único. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN05 & Se permiten hasta 2 renovaciones por ejemplar prestado. No se renueva un ejemplar con una pérdida o daño registrado. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN06 & Cada renovación agrega 3 días hábiles al vencimiento vigente. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN07 & Un ejemplar atrasado (la fecha ya pasó su vencimiento vigente) no puede ser renovado. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN08 & Se admiten devoluciones anticipadas y devoluciones parciales (por ejemplar, no necesariamente todo el préstamo junto). Entregar un ejemplar no cambia el vencimiento de los demás. La devolución se registra a nombre del mismo usuario del préstamo. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN09 & El historial de movimientos se conserva por 10 años desde el cierre del préstamo y no se puede modificar ni borrar. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
+RN01 & Los usuarios habilitados son estudiantes, docentes y asistentes de la educación. Un estudiante debe tener correo y curso; docentes y asistentes no tienen curso. Un usuario inactivo no puede pedir préstamos. &Presentación de avance\\
+RN02 & Máximo 3 ejemplares prestados simultáneamente por persona, considerando todos sus préstamos abiertos. El límite es el mismo para los tres tipos de usuario. & Presentación de avance\\
+RN03 & El plazo de préstamo inicial es de 3 días hábiles, contados desde la fecha del préstamo. &Presentación de avance\\
+RN04 & Solo puede existir un préstamo abierto por ejemplar físico, y solo se prestan ejemplares en condición buena o desgastada. Cada copia tiene un código único. &Presentación de avance\\
+RN05 & Se permiten hasta 2 renovaciones por ejemplar prestado. No se renueva un ejemplar con una pérdida o daño registrado. &Presentación de avance\\
+RN06 & Cada renovación agrega 3 días hábiles al vencimiento vigente. &Presentación de avance\\
+RN07 & Un ejemplar atrasado (la fecha ya pasó su vencimiento vigente) no puede ser renovado. &Presentación de avance\\
+RN08 & Se admiten devoluciones anticipadas y devoluciones parciales (por ejemplar, no necesariamente todo el préstamo junto). Entregar un ejemplar no cambia el vencimiento de los demás. La devolución se registra a nombre del mismo usuario del préstamo. &Presentación de avance\\
+RN09 & El historial de movimientos se conserva por 10 años desde el cierre del préstamo y no se puede modificar ni borrar. &Presentación de avance\\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -168,19 +155,19 @@ Durante el desarrollo se precisaron las siguientes reglas complementarias, que l
 \begin{longtable}{@{}l p{0.52\textwidth} p{0.33\textwidth}@{}}
 \caption{Reglas de negocio complementarias.}\\
 \toprule
-\textbf{N.º} & \textbf{Regla de negocio} & \textbf{Fuente (reunión o correo, fecha)}\\
+\textbf{N.º} & \textbf{Regla de negocio} & \textbf{Fuente}\\
 \midrule
 \endhead
-RN10 & Cada operación de préstamo incluye entre 1 y 3 ejemplares distintos. & \pend{COMPLETAR}\\
-RN11 & En la última semana del año escolar solo se reciben devoluciones: no hay préstamos ni renovaciones. El calendario indica, día por día, si se permiten préstamos y renovaciones. & \pend{COMPLETAR}\\
-RN12 & El plazo de un préstamo o de una renovación no puede entrar ni cruzar las vacaciones. & \pend{COMPLETAR}\\
-RN13 & Mientras un usuario tenga un ejemplar atrasado no puede pedir préstamos. Además, cada atraso lo deja una semana sin préstamos, contada desde el primer día hábil después del vencimiento. & \pend{COMPLETAR}\\
-RN14 & Una falta grave de conducta se sanciona con dos semanas sin préstamos. & \pend{COMPLETAR}\\
-RN15 & Las sanciones de RN13 y RN14 terminan el mismo día de la semana en que empezaron; si ese día no hay atención, en el siguiente día hábil. & \pend{COMPLETAR}\\
-RN16 & Los feriados, fines de semana y días sin atención no son hábiles; la biblioteca define su calendario. & \pend{COMPLETAR}\\
-RN17 & Un ejemplar perdido o con daño permanente se registra como incidencia y se resuelve con reposición (una copia nueva de la misma edición, en buen estado y nunca prestada) o con reembolso (con su monto). Mientras esté pendiente, el usuario no puede pedir préstamos. & \pend{COMPLETAR}\\
-RN18 & Se calculan dos indicadores anuales: préstamos por curso y libros más prestados. & \pend{COMPLETAR}\\
-RN19 & Se preparan avisos por correo para los préstamos atrasados, como máximo uno por préstamo y día. &\pend{COMPLETAR}\\
+RN10 & Cada operación de préstamo incluye entre 1 y 3 ejemplares distintos. & Grupo, durante la implementación\\
+RN11 & En la última semana del año escolar solo se reciben devoluciones: no hay préstamos ni renovaciones. El calendario indica, día por día, si se permiten préstamos y renovaciones. & Grupo, durante la implementación\\
+RN12 & El plazo de un préstamo o de una renovación no puede entrar ni cruzar las vacaciones. & Grupo, durante la implementación\\
+RN13 & Mientras un usuario tenga un ejemplar atrasado no puede pedir préstamos. Además, cada atraso lo deja una semana sin préstamos, contada desde el primer día hábil después del vencimiento. & Grupo, durante la implementación\\
+RN14 & Una falta grave de conducta se sanciona con dos semanas sin préstamos. & Grupo, durante la implementación\\
+RN15 & Las sanciones de RN13 y RN14 terminan el mismo día de la semana en que empezaron; si ese día no hay atención, en el siguiente día hábil. & Grupo, durante la implementación\\
+RN16 & Los feriados, fines de semana y días sin atención no son hábiles; la biblioteca define su calendario. & Grupo, durante la implementación\\
+RN17 & Un ejemplar perdido o con daño permanente se registra como incidencia y se resuelve con reposición (una copia nueva de la misma edición, en buen estado y nunca prestada) o con reembolso (con su monto). Mientras esté pendiente, el usuario no puede pedir préstamos. & Grupo, durante la implementación\\
+RN18 & Se calculan dos indicadores anuales: préstamos por curso y libros más prestados. & Grupo, durante la implementación\\
+RN19 & Se preparan avisos por correo para los préstamos atrasados, como máximo uno por préstamo y día. & Grupo, durante la implementación\\
 \bottomrule
 \end{longtable}
 
@@ -195,7 +182,7 @@ Según lo registrado en la presentación de avance:
 \item Se propone validar el ISBN y la edición antes de importar.
 \item La autorización de un nuevo préstamo también depende de los bloqueos aplicables.
 \item Las solicitudes que no se concretan y las renovaciones no suman préstamos nuevos.
-\item La necesidad de avisos de atraso fue identificada por la biblioteca.
+\item La necesidad de avisos de atraso forma parte del problema planteado en el escenario.
 \end{itemize}
 Otros supuestos asumidos durante la implementación:
 \begin{itemize}[nosep]
@@ -207,7 +194,7 @@ Otros supuestos asumidos durante la implementación:
 \end{itemize}
 
 \subsubsection{Tratamiento de los datos}\label{sec:tratamiento}
-La base se puebla solo con datos de ejemplo inventados (datos sintéticos o ficticios), sin información real de personas, en cumplimiento de la Ley 21.719 \cite{ley21719}. El caso de devolución parcial y renovación es ilustrativo, está basado en las reglas confirmadas y no representa movimientos reales de estudiantes. \pend{COMPLETAR: declaración de autorización del Colegio Siglo XXI de Lampa (Anexo A)}.
+La base se puebla solo con datos de ejemplo inventados (datos sintéticos o ficticios), sin información real de personas, en cumplimiento de la Ley 21.719 \cite{ley21719}. El caso de devolución parcial y renovación es ilustrativo, está basado en las reglas del caso y no representa movimientos reales de estudiantes. Como el caso es hipotético y todos los datos son inventados, no se trataron datos del colegio ni de personas reales, y no se requirió autorización (Anexo~A).
 
 %------------------------------------------------------------
 \subsection{Modelo entidad-relación}
@@ -500,14 +487,14 @@ CREATE TRIGGER actualizar_vencimiento AFTER INSERT ON renovacion
 \subsubsection{Procedimiento almacenado de KPIs}
 \begin{table}[h]
 \centering
-\caption{Indicadores acordados con el cliente.}
+\caption{Indicadores anuales del caso.}
 \small
 \begin{tabularx}{\textwidth}{l Y l Y}
 \toprule
-\textbf{KPI} & \textbf{Definición y unidad de conteo} & \textbf{Solicitado por (fecha)} & \textbf{Decisión que sustenta}\\
+\textbf{KPI} & \textbf{Definición y unidad de conteo} & \textbf{Origen} & \textbf{Decisión que sustenta}\\
 \midrule
-KPI 1: Préstamos por curso & Operaciones de préstamo según el curso registrado al retirar los libros. Tres ejemplares retirados juntos cuentan como un préstamo. & \pend{COMPLETAR: contraparte, dd/mm} & \pend{COMPLETAR: decisión}\\
-KPI 2: Libros más prestados & Cantidad de ejemplares retirados de cada libro durante el año. Las renovaciones no agregan préstamos nuevos. & \pend{COMPLETAR: contraparte, dd/mm} & Identificar los títulos más utilizados. \pend{COMPLETAR: decisión de gestión}\\
+KPI 1: Préstamos por curso & Operaciones de préstamo según el curso registrado al retirar los libros. Tres ejemplares retirados juntos cuentan como un préstamo. & Presentación de avance & Ver qué cursos usan menos la biblioteca, para orientar actividades de fomento lector.\\
+KPI 2: Libros más prestados & Cantidad de ejemplares retirados de cada libro durante el año. Las renovaciones no agregan préstamos nuevos. & Presentación de avance & Identificar los títulos más utilizados, para decidir qué libros conviene comprar en más copias.\\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -650,11 +637,11 @@ Todas las pruebas se ejecutaron sobre una base recién creada con el script de e
 
 \textbf{Prueba P6 --- sp\_kpis: Procedimiento almacenado de KPIs}
 \begin{itemize}[nosep]
-\item \textbf{Objetivo.} Obtener los dos indicadores anuales acordados.
+\item \textbf{Objetivo.} Obtener los dos indicadores anuales definidos.
 \item \textbf{Descripción.} Ejecutar \texttt{CALL sp\_kpis\_anuales(2026)} sobre los datos de ejemplo.
 \item \textbf{Evidencia.} Préstamos por curso: 5.º básico 3, 6.º básico 3 y sin curso (docentes y asistentes) 1. Libros más prestados: «Obra ficticia 1» con 2 ejemplares y las obras 2 a 9 con 1 cada una (evidencias P-06). La pantalla de estadísticas de la API muestra el mismo cálculo (Figura~\ref{fig:api-estadisticas}).
 \item \textbf{Código.} Procedimiento \texttt{sp\_kpis\_anuales} (Sección~3.6.3).
-\item \textbf{Análisis.} El total por curso (7) coincide con las operaciones de préstamo de 2026 y no con los ejemplares, que es la unidad acordada para el KPI 1.
+\item \textbf{Análisis.} El total por curso (7) coincide con las operaciones de préstamo de 2026 y no con los ejemplares, que es la unidad definida para el KPI 1.
 \end{itemize}
 
 \textbf{Prueba P7 --- sp\_rollback: Procedimiento con actualización y rollback}
@@ -720,7 +707,7 @@ Se diseñó e implementó una base de datos relacional para la biblioteca del Co
 
 Respecto de los objetivos específicos:
 \begin{enumerate}[nosep]
-\item Se levantaron los requerimientos con la biblioteca y se documentaron 19 reglas de negocio y los supuestos asumidos (Sección~3.1). Queda pendiente adjuntar la evidencia formal de las reuniones (Anexos A--C).
+\item Se documentaron 19 reglas de negocio y los supuestos asumidos (Sección~3.1). Como el caso es hipotético, no hay actas ni correos de un cliente real (Anexos A--C).
 \item Se construyó el modelo E-R en notación pata de gallo, con cardinalidad y opcionalidad justificadas en ambos extremos (Sección~3.2).
 \item Se transformó al modelo relacional siguiendo los siete pasos del algoritmo y se normalizó: todas las relaciones están en 3FN y la mayoría en FNBC (Secciones~3.3 y 3.4).
 \item Se implementó el modelo físico en PostgreSQL, se pobló con datos ficticios y se agregaron triggers, procedimientos almacenados y una API web, todo verificado con pruebas (Secciones~3.5 a 3.7 y 4).
@@ -742,13 +729,13 @@ Como trabajo futuro quedan la migración de los datos reales desde ABIES, con au
 \section*{Anexos}
 
 \subsection*{Anexo A. Autorización del cliente}
-Correo de la biblioteca autorizando el uso de la información con fines académicos (captura o transcripción). \pend{INSERTAR IMAGEN: correo de autorización}
+No aplica. El caso es hipotético: no se usó información del colegio ni de personas reales, y todos los datos de la base son inventados (Sección~\ref{sec:tratamiento}).
 
 \subsection*{Anexo B. Minutas de reuniones}
-Minutas internas y con la bibliotecaria, con fecha, asistentes, temas y acuerdos. \pend{COMPLETAR: minutas}
+No hubo reuniones con un cliente real. Las decisiones del grupo quedaron en la presentación de avance y, durante la implementación, en el historial de cambios del repositorio.
 
 \subsection*{Anexo C. Correos y supuestos}
-\pend{COMPLETAR: correos intercambiados con el cliente y supuestos asumidos}
+No hubo correos con un cliente. Los supuestos asumidos están en la Sección~3.1 (Supuestos).
 
 \subsection*{Anexo D. Código extenso}
 El script completo (936 líneas) se entrega aparte como \texttt{BibliotecaSigloXXI-scripts.sql}, en el mismo archivo comprimido que este informe. Contiene, en orden: esquema y tablas, reglas (triggers), procedimientos, datos de ejemplo, administración del calendario, devolución con condiciones, avisos, anulación de préstamos, seguridad y auditoría, cursos del colegio y consultas de ejemplo. También está en la carpeta \texttt{sql/} del repositorio.
