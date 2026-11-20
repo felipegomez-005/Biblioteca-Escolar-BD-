@@ -2,7 +2,7 @@
 
 ## Ejecución
 
-`npm.cmd test` ejecuta 118 pruebas: 29 de base de datos, 13 de API general, 12 de ISBN/Google Books, 15 de calendario, 10 de sanciones, 5 escenarios de administración, 3 de respaldos, 13 de avisos, 4 de corrección y 14 de seguridad, RUT y conservación. Se crean bases nuevas en memoria y se ejecutan los scripts de inicialización, incluidas las actualizaciones aditivas. Cada caso ordinario de base se revierte al terminar; los casos de COMMIT/ROLLBACK se ejecutan por separado porque prueban control explícito de transacciones. Las pruebas HTTP usan un puerto local libre y su propia base temporal. Las pruebas de respaldo usan carpetas independientes `.local/backup-test-*`; no modifican `.local/biblioteca/`.
+`npm.cmd test` ejecuta 119 pruebas: 30 de base de datos, 13 de API general, 12 de ISBN/Google Books, 15 de calendario, 10 de sanciones, 5 escenarios de administración, 3 de respaldos, 13 de avisos, 4 de corrección y 14 de seguridad, RUT y conservación. Se crean bases nuevas en memoria y se ejecutan los scripts de inicialización, incluidas las actualizaciones aditivas. Cada caso ordinario de base se revierte al terminar; los casos de COMMIT/ROLLBACK se ejecutan por separado porque prueban control explícito de transacciones. Las pruebas HTTP usan un puerto local libre y su propia base temporal. Las pruebas de respaldo usan carpetas independientes `.local/backup-test-*`; no modifican `.local/biblioteca/`.
 
 ## Casos cubiertos
 
@@ -19,6 +19,7 @@
 | 21–23 | Rechazar calendario desconocido/día cerrado; reversión completa si falla un elemento de una renovación múltiple. |
 | 24–27 | Proteger historial y atributos derivados, rechazar operaciones vacías/repetidas y comprobar asociaciones. |
 | 28–29 | Comprobar ROLLBACK y COMMIT explícitos del procedimiento de actualización. |
+| CURSOS 01 | Pre-kínder a 8.º básico (sin letras) existen por defecto para el año actual y el siguiente; repetir la actualización no duplica cursos. |
 
 Cada prueba tiene un nombre, pasos SQL y resultado verificable en `tests/biblioteca.test.mjs`. La salida de la ejecución identifica cuál pasó o falló. Las capturas y el análisis individual para el formato académico de la guía aún deben incorporarse a las evidencias finales.
 

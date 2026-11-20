@@ -191,3 +191,15 @@ test('29 - procedimiento confirma el correo y permite restaurar el dato de prueb
     assert.equal(await scalar('SELECT correo FROM biblioteca.usuario WHERE id=7'),'cambio@example.invalid');
   } finally { await db.query('CALL biblioteca.sp_actualizar_correo($1,$2,$3)',[7,old,true]); }
 });
+
+check('CURSOS 01 - Pre-kínder a 8.º básico existen por defecto para el año actual y el siguiente, sin duplicarse', async () => {
+  const anio = await scalar('SELECT extract(year FROM current_date)::int');
+  const esperados = ['Pre-kínder','Kínder','1.º básico','2.º básico','3.º básico','4.º básico','5.º básico','6.º básico','7.º básico','8.º básico'];
+  for (const a of [anio, anio+1]) {
+    const nombres = (await rows('SELECT c.nombre FROM biblioteca.curso c JOIN biblioteca.niveles_colegio() n USING (nombre) WHERE c.anio_escolar=$1 ORDER BY n.orden',[a])).map(r=>r.nombre);
+    assert.deepEqual(nombres, esperados);
+  }
+  assert.equal(await scalar('SELECT biblioteca.asegurar_cursos_colegio($1)',[anio]), 0);
+  assert.equal(await scalar('SELECT biblioteca.asegurar_cursos_colegio(2040)'), 10);
+  assert.equal(await scalar("SELECT count(*)::int FROM biblioteca.curso WHERE anio_escolar=2040 AND nombre ~ ' [A-D]$'"), 0);
+});

@@ -247,7 +247,7 @@ function sanctionForm(info) {
     });
 }
 function courseForm() {
-  showModal('Registrar curso',`<form><div class="fields">${input('nombre','Nombre del curso','',{max:80,help:'Por ejemplo: 3.º básico A.'})}${input('anio_escolar','Año escolar',context.fecha.slice(0,4),{type:'number'})}</div>${actions('Guardar curso')}</form>`,async data=>{await post('/cursos',data);await loadContext();toast('Curso registrado.');});
+  showModal('Registrar curso',`<form><div class="fields">${input('nombre','Nombre del curso','',{max:80,help:'Pre-kínder a 8.º básico se crean solos cada año; usa esto solo para un curso adicional.'})}${input('anio_escolar','Año escolar',context.fecha.slice(0,4),{type:'number'})}</div>${actions('Guardar curso')}</form>`,async data=>{await post('/cursos',data);await loadContext();toast('Curso registrado.');});
 }
 function userForm(user={}) {
   showModal(user.id?'Editar usuario':'Registrar usuario',`<form><div class="fields">

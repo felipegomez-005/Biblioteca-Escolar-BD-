@@ -1,7 +1,7 @@
 import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtemp,mkdir,readFile,writeFile,unlink,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,unlink,stat,rm} from 'node:fs/promises';
 import path from 'node:path';
 import {openDb,initialize,root} from '../scripts/db.mjs';
 import {exportBackup,verifyBackup,decodeBackup,restoreBackup,backupLocal,readBackup,fingerprint} from '../scripts/backup-lib.mjs';
@@ -14,7 +14,7 @@ before(async()=>{
   await db.query("INSERT INTO biblioteca.genero(nombre) VALUES('Respaldo: ñ y acentos')");
   original=await fingerprint(db);buffer=await exportBackup(db);
 });
-after(async()=>{await db?.close();});
+after(async()=>{await db?.close();if(temp)await rm(temp,{recursive:true,force:true});});
 
 test('BACKUP 01 - archivo íntegro restaura datos, reglas y secuencias; respaldo local vuelve a abrirse',async()=>{
   assert.deepEqual((await verifyBackup(buffer)).tablas,original);

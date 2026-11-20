@@ -36,6 +36,7 @@ Origen de requisitos: cuestionario de la biblioteca y aclaraciones transmitidas 
 - Una reposición requiere una copia nueva de la misma edición y código nuevo. Si la biblioteca acepta títulos equivalentes o reutiliza códigos, adaptar la regla.
 - Resolver una incidencia no levanta una sanción independiente todavía vigente. No se genera automáticamente una sanción grave de dos semanas por toda pérdida: el bloqueo por incidencia es independiente y la sanción grave se registra cuando corresponda.
 - La cola genera como máximo un aviso por préstamo y fecha. El envío automático propuesto es diario en días de atención (`AVISOS_HORA`, 08:30 por defecto); la frecuencia final debe acordarse con la biblioteca.
+- El colegio imparte de Pre-kínder a 8.º básico con un curso por nivel. Esos diez cursos se crean siempre por defecto (año actual y siguiente, `sql/11_cursos_colegio.sql`); se pueden agregar otros a mano, pero no se borran ni renombran cursos anteriores para conservar el curso histórico de los préstamos.
 - La conservación de diez años se cuenta desde el cierre del último ejemplar del préstamo.
 - La fotografía del usuario no se almacena: no la exige ninguna regla y aumenta los datos personales tratados. Se puede agregar si el colegio la pide.
 - El indicador por libro agrupa por edición (`libro.id`); si se quiere agrupar distintas ediciones de una obra, habrá que introducir esa distinción.

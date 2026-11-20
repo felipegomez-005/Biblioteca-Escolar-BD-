@@ -102,6 +102,7 @@ Las pruebas crean otra base en memoria y no modifican la copia local. Esta opci�
 | `sql/09_anulacion_prestamo.sql` | Actualización repetible: anulación de préstamos con motivo y operador registrados. |
 | `tests/correccion.test.mjs` | Anulación que conserva historial, valida motivo y rechaza incidencias pendientes. |
 | `sql/10_seguridad_auditoria.sql` | Actualización repetible: operadores, auditoría inmutable, reintentos de avisos, RUT y vista de conservación. |
+| `sql/11_cursos_colegio.sql` | Actualización repetible: crea siempre los cursos Pre-kínder a 8.º básico (uno por nivel) del año actual y del siguiente. |
 | `server/auth.mjs` | Contraseñas scrypt, sesiones, bloqueo por intentos y permisos por rol. |
 | `tests/seguridad.test.mjs` | Login, roles, auditoría, RUT y conservación de diez años. |
 | `docs/normalizacion.md` | E-R completo, transformación al relacional, dependencias funcionales, 3FN, KPIs y trazabilidad de reglas. |
@@ -127,6 +128,7 @@ psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/07_devolucion_c
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/08_avisos_detalle.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/09_anulacion_prestamo.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/10_seguridad_auditoria.sql
+psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/11_cursos_colegio.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/05_consultas.sql
 ```
 
@@ -160,7 +162,7 @@ Puede guardar consultas en un archivo `.sql` y ejecutarlo con `npm.cmd run db:sq
 
 El calendario 2026–2027, sus vacaciones y los feriados incluidos son **ficticios para las pruebas**. Deben reemplazarse por el calendario validado del colegio antes de cualquier uso real. Una fecha sin configuración provoca un error.
 
-Los cursos de ejemplo siguen la estructura del colegio: Pre-kínder, Kínder y 1.º a 8.º básico, sin letras porque hay un curso por nivel, para 2026 y 2027. Los estudiantes de prueba están en 5.º y 6.º básico 2026.
+Los cursos Pre-kínder, Kínder y 1.º a 8.º básico (sin letras, porque hay un curso por nivel) existen siempre por defecto: al crear la base y en cada inicio se aseguran los del año actual y del siguiente, sin borrar ni renombrar cursos anteriores. Los estudiantes de prueba están en 5.º y 6.º básico 2026.
 
 Los estudiantes usan identificadores `DEMO-EST-*` y correos `example.invalid`. No se han importado RUT, nombres, fotografías ni correos reales. Los estados actuales de las vistas dependen de `CURRENT_DATE`; para estudiar sanciones históricas se usa `motivos_bloqueo(usuario, fecha)` con una fecha explícita. Esa función usa el historial conservado de vencimientos y no reconstruye versiones anteriores a una renovación posterior.
 
