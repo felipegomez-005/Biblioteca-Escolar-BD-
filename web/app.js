@@ -4,14 +4,17 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const fmt=d=>d?new Intl.DateTimeFormat('es-CL',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(String(d).slice(0,10)+'T12:00:00Z')):'—';
 const types={estudiante:'Estudiante',docente:'Docente',asistente:'Asistente'};
 const reasons={usuario_inactivo:'Usuario inactivo',ejemplar_atrasado:'Tiene ejemplares atrasados',sancion_por_atraso:'Sanción por atraso vigente',conducta_grave:'Sanción por conducta grave vigente',reposicion_o_reembolso_pendiente:'Reposición o reembolso pendiente'};
-let context,routeVersion=0,modalBusy=false,toastTimer,selectedUser=null,detailRequest=0;
+let context,routeVersion=0,modalBusy=false,toastTimer,selectedUser=null,detailRequest=0,session=null;
+const roles={admin:'Administración',bibliotecaria:'Bibliotecaria',consulta:'Consulta'};
+const fmtTime=d=>d?new Intl.DateTimeFormat('es-CL',{dateStyle:'medium',timeStyle:'short'}).format(new Date(d)):'—';
 const main=$('#contenido'),dialog=$('#modal');
 
 async function api(url,options={}) {
   let response;
   try {response=await fetch('/api'+url,{...options,headers:{'Content-Type':'application/json','X-Biblioteca-Request':'1',...options.headers}});}
   catch {throw new Error('No hay conexión con la aplicación. Compruebe que la terminal siga ejecutando npm.cmd start.');}
-  const result=await response.json();
+  const result=await response.json().catch(()=>({}));
+  if(response.status===401 && !url.startsWith('/sesion')) {showAuth();throw new Error('Tu sesión terminó. Inicia sesión nuevamente.');}
   if(!response.ok) throw new Error(result.error||'No se pudo completar la operación.');
   return result;
 }
@@ -196,7 +199,7 @@ async function historyModal(type,id) {
           ${d?`<p><strong>Devolución Nº ${d.id}</strong><br>${fmt(d.fecha)} · ${d.condicion==='desgastado'?'Desgastado':'Bueno'}<br>${esc(d.observaciones||'Sin observaciones')}</p>`:''}
           ${i?`<p><strong>${i.tipo==='perdida'?'Pérdida':'Daño permanente'}</strong><br>${fmt(i.fecha)} · ${esc(i.observaciones||'Sin observaciones')}</p>
             ${i.fecha_resolucion?`<p>Resuelta el ${fmt(i.fecha_resolucion)} por ${i.solucion==='reposicion'?`reposición: ${esc(i.codigo_reemplazo)}`:`reembolso: ${esc(i.monto_reembolso)} CLP`}.</p>`:'<p class="help">Reposición o reembolso pendiente.</p>'}`:''}
-          ${!d && !i ? `<div class="actions"><button class="text-button" data-anular="${m.prestamo_id}">Anular préstamo</button></div>` : ''}
+          ${!d && !i && (!session || session.rol==='admin') ? `<div class="actions"><button class="text-button" data-anular="${m.prestamo_id}">Anular préstamo</button></div>` : ''}
         </details>`;
       }).join(''):empty('Sin movimientos registrados')}
       ${isUser?'<p class="help">Las sanciones por conducta grave se consultan desde el botón Sanciones de este usuario.</p>':''}`);
@@ -207,10 +210,10 @@ function anularForm(prestamoId) {
   showModal('Anular préstamo',`<form>
     <div class="notice warn"><strong>Préstamo Nº ${prestamoId}</strong>Se cerrarán todos los ejemplares abiertos de este préstamo y se registrará el motivo. El historial se conserva.</div>
     ${field('motivo','Motivo de la anulación','<textarea id="motivo" name="motivo" maxlength="1000" required></textarea>',true)}
-    ${input('operador','Operador (opcional)','',{required:false,max:120})}
     ${field('observaciones','Observaciones (opcional)','<textarea id="observaciones" name="observaciones" maxlength="1000"></textarea>',true)}
+    ${session?`<p class="help">La anulación quedará registrada a nombre de ${esc(session.nombre)} (${esc(session.usuario)}).</p>`:''}
     ${actions('Anular préstamo')}</form>`,async data=>{
-      await post('/anulaciones',{prestamo_id:prestamoId,motivo:data.motivo,operador:data.operador,observaciones:data.observaciones});
+      await post('/anulaciones',{prestamo_id:prestamoId,motivo:data.motivo,observaciones:data.observaciones});
       toast('Préstamo anulado. El historial conserva la corrección.');
       await renderRoute();
     });
@@ -490,8 +493,129 @@ function calendarForm(initial={}) {
   };
 }
 
-const routes={inicio:home,catalogo:catalog,usuarios:usersPage,prestamos:loans,devoluciones:returns,pendientes:pendingPage,estadisticas:statsPage,calendario:calendarPage};
+// ---------- Avisos por correo ----------
+const noticeStates={pendiente:['Pendiente','warn'],enviado:['Enviado',''],error:['Con error','danger'],cancelado:['Cancelado','neutral']};
+let noticeFilter='';
+async function noticesPage(version) {
+  const data=await api('/avisos'+(noticeFilter?'?estado='+noticeFilter:''));if(version!==routeVersion)return;
+  const canWrite=!session || session.rol!=='consulta';
+  const count=state=>data.resumen.find(r=>r.estado===state)?.cantidad||0;
+  const last=data.ultimo;
+  main.innerHTML=heading('Avisos por correo','Recordatorios de devolución para préstamos atrasados, con su estado, reintentos y errores.',
+    canWrite?`<div class="head-actions"><button class="button secondary" id="prepare-notices">Preparar avisos de hoy</button><button class="button" id="send-notices" ${data.smtp?'':'disabled title="Configura SMTP para enviar"'}>Enviar ahora</button></div>`:'')+
+    `<div class="status-grid">
+      <section class="card"><div class="metric-label">Correo SMTP</div><p><span class="badge ${data.smtp?'':'warn'}">${data.smtp?'Configurado':'Sin configurar'}</span></p>
+        <p class="help">${data.smtp?'Los avisos salen desde la cuenta definida en el archivo .env.':'Completa SMTP_HOST y SMTP_FROM en .env y reinicia la aplicación. Mientras tanto los avisos se preparan, pero no se envían.'}</p></section>
+      <section class="card"><div class="metric-label">Envío automático</div><p><span class="badge ${data.automatico?'':'neutral'}">${data.automatico?'Activo · '+esc(data.automatico.hora):'Desactivado'}</span></p>
+        <p class="help">${data.automatico?'Próximo envío: '+fmtTime(data.automatico.proxima)+'.':'Para activarlo usa AVISOS_AUTOMATICOS=1 y AVISOS_HORA en .env (requiere SMTP).'}</p></section>
+      <section class="card"><div class="metric-label">Último envío</div>
+        <p class="help">${last?`${fmtTime(last.en)} · ${last.origen==='manual'?'manual':'automático'}<br>${last.enviados} enviados, ${last.cancelados} cancelados, ${last.errores} con error${last.cerrada?'<br>La biblioteca estaba cerrada: no se generaron avisos nuevos.':''}`:'Todavía no hay envíos desde que se abrió la aplicación.'}</p></section>
+    </div>
+    <div class="toolbar">${field('notice-filter','Estado',`<select id="notice-filter"><option value="">Todos (${data.resumen.reduce((n,r)=>n+r.cantidad,0)})</option>${Object.entries(noticeStates).map(([k,[label]])=>`<option value="${k}" ${noticeFilter===k?'selected':''}>${label} (${count(k)})</option>`).join('')}</select>`)}
+      <span class="count">${data.avisos.length} avisos${data.avisos.length===300?' (se muestran los 300 más recientes)':''}</span></div>
+    ${data.avisos.length?`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Usuario</th><th>Préstamo</th><th>Estado</th><th>Intentos</th><th>Detalle</th></tr></thead><tbody>${data.avisos.map(a=>{
+      const [label,tone]=noticeStates[a.estado]||[a.estado,'neutral'];
+      return `<tr><td>${fmt(a.fecha)}</td><td><strong>${esc(a.nombre)}</strong><small>${esc(a.destinatario)}</small></td><td>Nº ${a.prestamo_id}</td>
+        <td><span class="badge ${tone}">${label}</span></td><td class="number">${a.intentos} / ${data.max_intentos}</td>
+        <td>${a.estado==='enviado'?'Enviado '+fmtTime(a.enviado_en):a.error_detalle?`<span class="code-detail">${esc(a.error_detalle)}</span>`:a.ultimo_intento?'Último intento '+fmtTime(a.ultimo_intento):'—'}</td></tr>`;}).join('')}</tbody></table></div>`:empty('Sin avisos','No hay avisos con este estado.')}
+    <p class="help">Un aviso con error se reintenta en el siguiente envío, hasta ${data.max_intentos} intentos. Si los ejemplares ya se devolvieron, renovaron o tienen una incidencia, el aviso se cancela y no se envía.</p>`;
+  $('#notice-filter').onchange=e=>{noticeFilter=e.target.value;renderRoute();};
+  const run=async(button,work)=>{button.disabled=true;button.setAttribute('aria-busy','true');try{toast(await work());await renderRoute();}catch(e){toast(e.message);button.disabled=false;button.removeAttribute('aria-busy');}};
+  if(canWrite) {
+    $('#prepare-notices').onclick=e=>run(e.currentTarget,async()=>{const r=await post('/avisos/preparar',{});return `Avisos preparados: ${r.pendientes} pendientes de envío.`;});
+    $('#send-notices').onclick=e=>run(e.currentTarget,async()=>{const r=await post('/avisos/enviar',{});return r.pendientes?`${r.enviados} enviados, ${r.cancelados} cancelados, ${r.errores} con error.`:'No había avisos por enviar.';});
+  }
+}
+
+// ---------- Administración ----------
+async function adminPage(version) {
+  if(session && session.rol!=='admin') {main.innerHTML=heading('Administración','Esta sección es solo para cuentas de administración.')+'<div class="notice warn">Tu cuenta no tiene permiso para administrar accesos.</div>';return;}
+  const [operators,log,retention]=await Promise.all([api('/operadores'),api('/auditoria?limite=200'),api('/retencion')]);if(version!==routeVersion)return;
+  main.innerHTML=heading('Administración','Cuentas de acceso, registro de operaciones y conservación de datos.','<button class="button" id="add-operator">＋ Nueva cuenta</button>')+
+    `<section class="card admin-section"><div class="card-head"><h2>Cuentas de acceso</h2><span class="count">${operators.length} cuentas</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Creada</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
+      ${operators.map(o=>`<tr><td><strong>${esc(o.nombre)}</strong><small>${esc(o.usuario)}${session?.usuario===o.usuario?' · tu cuenta':''}</small></td><td>${roles[o.rol]||esc(o.rol)}</td>
+        <td><span class="badge ${o.activo?'':'neutral'}">${o.activo?'Activa':'Desactivada'}</span></td><td>${new Intl.DateTimeFormat('es-CL',{dateStyle:'medium'}).format(new Date(o.creado_en))}</td>
+        <td><button class="text-button" data-operator="${o.id}">Editar</button></td></tr>`).join('')}</tbody></table></div>
+      <p class="help"><strong>Administración</strong>: todo, incluidas cuentas, auditoría, calendario y anulaciones. <strong>Bibliotecaria</strong>: catálogo, usuarios y circulación. <strong>Consulta</strong>: solo lectura.</p></section>
+    <section class="card admin-section"><div class="card-head"><h2>Registro de operaciones</h2><span class="count" id="audit-count"></span></div>
+      ${search('Filtrar por operador, operación o resultado','audit-search')}<div id="audit-results"></div>
+      <p class="help">Cada inicio de sesión, escritura y acceso rechazado queda registrado. El registro no se puede modificar ni borrar. No guarda contraseñas.</p></section>
+    <section class="card admin-section"><div class="card-head"><h2>Conservación de datos</h2><span class="badge neutral">${retention.politica_anios} años</span></div>
+      ${retention.prestamos.length?`<div class="notice warn"><strong>${retention.prestamos.length} préstamos superaron el plazo de conservación</strong>Antes de archivarlos o eliminarlos, genera y verifica un respaldo (npm.cmd run db:backup).</div>
+        <div class="table-wrap"><table><thead><tr><th>Préstamo</th><th>Fecha</th><th>Cerrado</th><th>Conservar hasta</th></tr></thead><tbody>${retention.prestamos.map(r=>`<tr><td>Nº ${r.prestamo_id}</td><td>${fmt(r.fecha_prestamo)}</td><td>${fmt(r.fecha_cierre)}</td><td>${fmt(r.conservar_hasta)}</td></tr>`).join('')}</tbody></table></div>`
+        :'<div class="notice"><strong>Ningún préstamo superó el plazo</strong>Los préstamos cerrados se conservan 10 años desde su cierre. Esta lista solo identifica candidatos: no borra nada.</div>'}
+      ${retention.auditoria_antigua?`<p class="help">${retention.auditoria_antigua} registros de auditoría tienen más de 10 años.</p>`:''}</section>`;
+  const renderLog=term=>{
+    const rows=filterRows(log.map(x=>({...x,texto:`${x.accion} ${x.ruta} ${x.resultado}`})),term,['operador','texto']);
+    $('#audit-count').textContent=`${rows.length} de las últimas ${log.length} operaciones`;
+    $('#audit-results').innerHTML=rows.length?`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Operador</th><th>Operación</th><th>Resultado</th><th>Detalle</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${fmtTime(x.registrado_en)}</td><td>${esc(x.operador)}</td><td><span class="code-detail">${esc(x.accion)} ${esc(x.ruta)}</span></td>
+      <td><span class="badge ${x.resultado==='ok'?'':'danger'}">${x.resultado==='ok'?'Correcto':'Rechazado'}</span></td><td><span class="code-detail">${esc(JSON.stringify(x.detalle||{}).slice(0,180))}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Sin operaciones','No hay registros que coincidan.');
+  };
+  renderLog('');watchSearch(renderLog,'audit-search');
+  $('#add-operator').onclick=()=>operatorForm();
+  $$('[data-operator]').forEach(b=>b.onclick=()=>operatorForm(operators.find(o=>o.id===Number(b.dataset.operator))));
+}
+function operatorForm(op) {
+  const editing=Boolean(op);
+  showModal(editing?'Editar cuenta':'Nueva cuenta',`<form><div class="fields">
+    ${editing?`<div class="field"><label for="op-user">Usuario</label><input id="op-user" value="${esc(op.usuario)}" disabled></div>`:input('usuario','Usuario','',{max:40,help:'3 a 40 caracteres: minúsculas, números, punto, guion o guion bajo.'})}
+    ${input('nombre','Nombre',op?.nombre||'',{max:120})}
+    ${select('rol','Rol',Object.entries(roles).map(([k,v])=>`<option value="${k}" ${(op?.rol||'bibliotecaria')===k?'selected':''}>${v}</option>`).join(''))}
+    ${input('clave',editing?'Nueva contraseña (opcional)':'Contraseña inicial','',{type:'password',required:!editing,max:200,help:'Mínimo 10 caracteres.'+(editing?' Déjala vacía para mantener la actual.':'')})}
+    ${editing?`<div class="field full"><label class="check"><input type="checkbox" name="activo" ${op.activo?'checked':''}> Cuenta activa</label><small>Al guardar se cierran las sesiones abiertas de esta cuenta.</small></div>`:''}
+    </div>${actions(editing?'Guardar cambios':'Crear cuenta')}</form>`,async data=>{
+      if(editing) await post('/operadores/'+op.id,{nombre:data.nombre,rol:data.rol,activo:data.activo==='on',...(data.clave?{clave:data.clave}:{})},'PATCH');
+      else await post('/operadores',data);
+      toast(editing?'Cuenta actualizada.':'Cuenta creada.');
+      await renderRoute();
+    });
+  $('#clave',dialog).autocomplete='new-password';
+}
+
+// ---------- Sesión ----------
+function applySession() {
+  document.body.classList.remove('locked');$('#auth').hidden=true;$('#auth').innerHTML='';
+  $$('[data-admin]').forEach(a=>a.hidden=Boolean(session) && session.rol!=='admin');
+  // Consulta: se ocultan los botones de registro. El servidor igual rechaza cualquier escritura.
+  document.body.classList.toggle('readonly',session?.rol==='consulta');
+  $('#session-box').innerHTML=session?`<span><strong>${esc(session.nombre)}</strong> · ${roles[session.rol]||esc(session.rol)}${session.rol==='consulta'?' <span class="badge neutral">Solo lectura</span>':''}</span><button class="text-button" id="logout" type="button">Cerrar sesión</button>`:'';
+  if(session) $('#logout').onclick=async()=>{try{await post('/sesion/salir',{});}catch{}session=null;showAuth(true);};
+}
+async function showAuth(configured) {
+  if(document.body.classList.contains('locked') && configured===undefined) return;
+  if(configured===undefined) {try{configured=(await api('/sesion')).configurado;}catch{configured=true;}}
+  session=null;++routeVersion;if(dialog.open)dialog.close();
+  // Al cerrar la sesión no deben quedar datos de la pantalla anterior en la página.
+  main.innerHTML='';$('#modal-body').innerHTML='';$('#session-box').innerHTML='';
+  document.body.classList.add('locked');
+  const box=$('#auth');box.hidden=false;
+  box.innerHTML=`<form class="auth-card" novalidate><span class="brand-mark" aria-hidden="true">B<span>·</span></span><p class="eyebrow">BIBLIOTECA ESCOLAR</p>
+    <h1>${configured?'Iniciar sesión':'Crear la cuenta de administración'}</h1>
+    <p class="help">${configured?'Ingresa con tu cuenta para gestionar la biblioteca. Cada operación queda registrada a tu nombre.':'Es la primera vez que se abre esta base. Crea la cuenta que administrará los accesos; luego podrás crear las cuentas del resto del equipo.'}</p>
+    ${configured?'':input('nombre','Nombre de la persona','',{max:120})}
+    ${input('usuario','Usuario','',{max:40,help:configured?'':'3 a 40 caracteres: minúsculas, números, punto, guion o guion bajo.'})}
+    ${input('clave','Contraseña','',{type:'password',max:200,help:configured?'':'Mínimo 10 caracteres.'})}
+    <div class="form-error" role="alert"></div><button class="button" type="submit">${configured?'Entrar':'Crear cuenta y entrar'}</button></form>`;
+  const form=$('form',box);
+  form.elements.usuario.autocomplete='username';form.elements.clave.autocomplete=configured?'current-password':'new-password';
+  (form.elements.nombre||form.elements.usuario).focus();
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    const button=$('button[type=submit]',form),error=$('.form-error',form),old=button.textContent;
+    button.disabled=true;button.textContent='Ingresando…';error.textContent='';
+    try {
+      const r=await post(configured?'/sesion':'/sesion/inicial',Object.fromEntries(new FormData(form)));
+      session=r.operador;applySession();await renderRoute();
+    } catch(e) {error.textContent=e.message;form.elements.clave.value='';form.elements.clave.focus();}
+    finally {button.disabled=false;button.textContent=old;}
+  };
+}
+
+const routes={inicio:home,catalogo:catalog,usuarios:usersPage,prestamos:loans,devoluciones:returns,pendientes:pendingPage,estadisticas:statsPage,calendario:calendarPage,avisos:noticesPage,administracion:adminPage};
+const titles={inicio:'Inicio',catalogo:'Catálogo',usuarios:'Usuarios',prestamos:'Nuevo préstamo',devoluciones:'Devoluciones',pendientes:'Pendientes',estadisticas:'Estadísticas',calendario:'Calendario',avisos:'Avisos',administracion:'Administración'};
 async function renderRoute() {
+  if(document.body.classList.contains('locked'))return;
   const version=++routeVersion;
   window.scrollTo(0,0);
   const route=location.hash.slice(1)||'inicio';
@@ -499,9 +623,16 @@ async function renderRoute() {
   main.innerHTML='<div class="loading" role="status">Cargando…</div>';
   try {
     await loadContext();if(version!==routeVersion)return;
-    document.title=({inicio:'Inicio',catalogo:'Catálogo',usuarios:'Usuarios',prestamos:'Nuevo préstamo',devoluciones:'Devoluciones',pendientes:'Pendientes',estadisticas:'Estadísticas',calendario:'Calendario'}[route]||'Inicio')+' · Biblioteca escolar';
+    document.title=(titles[route]||'Inicio')+' · Biblioteca escolar';
     await (routes[route]||home)(version);
   } catch(e) {if(version!==routeVersion)return;main.innerHTML=`${heading('No pudimos cargar la biblioteca','Revisa que la aplicación esté abierta en la terminal.')}<div class="notice danger">${esc(e.message)}</div><button class="button" id="retry">Volver a intentar</button>`;$('#retry').onclick=renderRoute;}
 }
+async function boot() {
+  try {
+    const s=await api('/sesion');
+    if(s.requiere && !s.operador) return showAuth(s.configurado);
+    session=s.operador;applySession();await renderRoute();
+  } catch(e) {main.innerHTML=`${heading('No pudimos cargar la biblioteca','Revisa que la aplicación esté abierta en la terminal.')}<div class="notice danger">${esc(e.message)}</div><button class="button" id="retry">Volver a intentar</button>`;$('#retry').onclick=boot;}
+}
 window.addEventListener('hashchange',()=>{if(location.hash==='#contenido'){main.focus();return;}renderRoute();});
-await renderRoute();
+await boot();

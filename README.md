@@ -2,7 +2,7 @@
 
 Base independiente de desarrollo para el proyecto semestral. Usa SQL de PostgreSQL y datos ficticios para probar catálogo, préstamos, devoluciones, renovaciones y sanciones. La biblioteca real utiliza un sistema que identificó como ABIES; su versión y sus mecanismos de integración siguen pendientes de comprobar.
 
-**Esta versión no está conectada a ABIES ni modifica sus datos.** Ya incluye una aplicación web local y una API HTTP para trabajar con la base. La consulta por ISBN a Google Books está implementada y verificada con una consulta real, revisión y guardado desde el formulario. Cada instalación debe configurar su clave local según la guía. El envío efectivo de correos continúa pendiente.
+**Esta versión no está conectada a ABIES ni modifica sus datos** ([propuesta de integración](docs/abies.md)). Incluye una aplicación web local con cuentas y roles, una API HTTP, consulta por ISBN a Google Books (verificada con una consulta real), avisos por correo SMTP con envío diario automático, auditoría de cada operación, validación de RUT e ISBN, respaldos y conservación de diez años. Cada instalación configura sus claves locales en `.env`.
 
 ## Abrir la aplicación
 
@@ -13,6 +13,10 @@ npm.cmd start
 ```
 
 Después abre **http://127.0.0.1:3000**. Mantén la terminal abierta; para detener la aplicación, presiona **Ctrl+C**. Los formularios guardan en la misma base local de `.local/biblioteca/`. Cerrar la pestaña no borra los datos ni apaga el servidor.
+
+**Primera vez:** la página pide crear la cuenta de administración (contraseña de 10 caracteres o más). Después, en **Administración**, se crean las cuentas de bibliotecaria (opera) y de consulta (solo lectura). Cada operación queda registrada con el nombre de quien la hizo. [Roles, sesiones y auditoría](docs/seguridad.md).
+
+Para probar sin tocar la base real: `$env:BIBLIOTECA_PRUEBA='1'; $env:PORT='3100'; npm.cmd start` usa una base temporal en memoria.
 
 La interfaz permite:
 
@@ -30,10 +34,12 @@ La interfaz permite:
 - Anular un préstamo ingresado por error desde su historial, conservando el historial y registrando el motivo.
 - Consultar pendientes y estadísticas anuales.
 - Administrar el calendario mensual, feriados, vacaciones y períodos de solo devoluciones, con revisión previa e historial. [Uso y prueba del calendario](docs/calendario.md).
+- Revisar y enviar avisos de atraso desde **Avisos**: estado de SMTP, próxima ejecución automática, intentos y errores.
+- Administrar operadores, revisar la auditoría y los registros que cumplen diez años desde **Administración** (solo admin).
 
-Las devoluciones permiten registrar ejemplares buenos o desgastados; los daños permanentes se gestionan como incidencias. Las sanciones por conducta grave bloquean nuevos préstamos durante dos semanas y conservan su historial al finalizar. Los avisos de correo se envían con `avisos:enviar`; no se realizan pagos desde la aplicación.
+Las devoluciones permiten registrar ejemplares buenos o desgastados; los daños permanentes se gestionan como incidencias. Las sanciones por conducta grave bloquean nuevos préstamos durante dos semanas y conservan su historial al finalizar. No se realizan pagos desde la aplicación.
 
-La API escucha solamente en `127.0.0.1`. Es una aplicación local de prueba, sin cuentas de acceso de bibliotecarios ni despliegue público. [Documentación de la API](docs/api.md).
+La API escucha solamente en `127.0.0.1` y exige sesión. No está pensada para publicarse en internet; para usarla en la red del colegio se necesita HTTPS. [Documentación de la API](docs/api.md).
 
 Mientras esté abierta, no ejecutes `db:resumen` ni `db:sql` contra la misma base: PGlite permite un solo proceso propietario. `npm.cmd test` sí se puede ejecutar, porque utiliza bases temporales independientes.
 
@@ -43,7 +49,7 @@ Con la aplicación detenida, `npm.cmd run db:backup` crea y verifica una copia e
 
 ## Avisos por correo
 
-Con la aplicación detenida, `npm.cmd run avisos:enviar` prepara los avisos del día, envía por SMTP los que correspondan y registra el resultado. `npm.cmd run avisos:enviar -- --simular` los lista sin enviar ni modificar nada; `npm.cmd run avisos:preparar` solo genera los pendientes. Los avisos ya devueltos o renovados se cancelan antes de enviar. [Configuración, frecuencia y registro](docs/avisos.md).
+Configurar `SMTP_*` en `.env` (ver `.env.example`). Con `AVISOS_AUTOMATICOS=1`, la aplicación envía los avisos todos los días a `AVISOS_HORA` (08:30 por defecto). También se pueden enviar desde la pantalla Avisos o, con la aplicación detenida, con `npm.cmd run avisos:enviar` (`-- --simular` para solo listar). Los avisos de libros ya devueltos se cancelan antes de enviar y los errores se reintentan hasta 3 veces. [Configuración, frecuencia y registro](docs/avisos.md).
 
 ## Comenzar en VSCode
 
@@ -95,6 +101,13 @@ Las pruebas crean otra base en memoria y no modifican la copia local. Esta opci�
 | `docs/avisos.md` | Configuración SMTP, frecuencia, comandos y registro de avisos. |
 | `sql/09_anulacion_prestamo.sql` | Actualización repetible: anulación de préstamos con motivo y operador registrados. |
 | `tests/correccion.test.mjs` | Anulación que conserva historial, valida motivo y rechaza incidencias pendientes. |
+| `sql/10_seguridad_auditoria.sql` | Actualización repetible: operadores, auditoría inmutable, reintentos de avisos, RUT y vista de conservación. |
+| `server/auth.mjs` | Contraseñas scrypt, sesiones, bloqueo por intentos y permisos por rol. |
+| `tests/seguridad.test.mjs` | Login, roles, auditoría, RUT y conservación de diez años. |
+| `docs/normalizacion.md` | E-R completo, transformación al relacional, dependencias funcionales, 3FN, KPIs y trazabilidad de reglas. |
+| `docs/seguridad.md` | Roles, sesiones, auditoría y validación de RUT. |
+| `docs/retencion.md` | Política de conservación de diez años y procedimiento de archivo. |
+| `docs/abies.md` | Propuesta de integración con ABIES y preguntas pendientes. |
 | `web/` | Pantallas, estilos y comportamiento de los formularios. |
 | `server/` | Servidor local, rutas de la API y validaciones. |
 | `docs/api.md` | Instrucciones de uso, endpoints y alcance de la aplicación. |
@@ -113,6 +126,7 @@ psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/06_administraci
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/07_devolucion_condiciones.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/08_avisos_detalle.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/09_anulacion_prestamo.sql
+psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/10_seguridad_auditoria.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/05_consultas.sql
 ```
 
@@ -150,12 +164,11 @@ Los estudiantes usan identificadores `DEMO-EST-*` y correos `example.invalid`. N
 
 ## Próximas etapas
 
-1. Completar la comprobación visual del administrador de calendario y cargar fechas validadas del colegio. Las pruebas automáticas del calendario ya pasaron. Validar también las convenciones del documento de reglas.
-2. Documentar las capturas y demostración de la API de consulta ya implementada.
-3. Mantener la clave de Google Books configurada localmente. La búsqueda real, revisión y guardado ya se verificaron; repetir la comprobación al instalar en otro equipo.
-4. Configurar la cuenta SMTP real y programar la frecuencia de `avisos:enviar`. El envío, el registro de estados/errores y la cancelación de avisos resueltos ya están implementados.
-5. Verificar versión, permisos y opciones de intercambio de ABIES; acordar qué sistema mantiene cada dato.
-6. Completar el informe académico: transformación paso a paso, normalización formal, decisiones asociadas a KPIs y capturas de pruebas.
+1. Cargar el calendario real del colegio y validar las convenciones de [reglas-y-decisiones.md](docs/reglas-y-decisiones.md).
+2. Configurar la cuenta SMTP real y acordar la frecuencia de los avisos (propuesta: diaria a las 08:30).
+3. Responder las preguntas de [abies.md](docs/abies.md) y definir qué sistema mantiene cada dato.
+4. Probar en PostgreSQL nativo con dos sesiones simultáneas antes de un uso multiusuario.
+5. Adjuntar la evidencia del cliente, las capturas de pruebas y preparar informe y presentación a partir de [normalizacion.md](docs/normalizacion.md) y [pruebas.md](docs/pruebas.md).
 
 ## Referencias técnicas
 

@@ -18,13 +18,13 @@ Origen de requisitos: cuestionario de la biblioteca y aclaraciones transmitidas 
 | RN10 | No se presta ni se renueva en la última semana antes de vacaciones de invierno y verano. | Banderas de calendario; sí se pueden recibir devoluciones. |
 | RN11 | Se rechaza una renovación que dejaría la devolución en vacaciones. | El plazo no puede entrar ni cruzar un intervalo de vacaciones. |
 | RN12 | Atraso suspende una semana desde el inicio del atraso; deuda pendiente sigue bloqueando. | Bloqueos calculados independientemente. |
-| RN13 | Conducta grave suspende dos semanas. | Tabla sanción y formulario Usuarios → Sanciones; cuentas y permisos de operadores aún pendientes. |
+| RN13 | Conducta grave suspende dos semanas. | Tabla sanción y formulario Usuarios → Sanciones; cada registro queda auditado con el operador. |
 | RN14 | Una/dos semanas de sanción terminan el mismo día de semana siguiente/dos semanas después. Los feriados cuentan. | Sumar 7/14 días calendario y desplazar el término al siguiente día de atención. |
 | RN15 | Feriados y fines de semana no son días hábiles del préstamo. | Calendario explícito. |
 | RN16 | Pérdida o daño permanente se resuelve por reposición o reembolso. | Incidencia pendiente bloquea; se conserva el ejemplar original como baja. |
-| RN17 | Historial de préstamos y devoluciones se conserva diez años. | Historial protegido; no se implementa purga automática. |
+| RN17 | Historial de préstamos y devoluciones se conserva diez años. | Historial protegido; vista `v_retencion` de candidatos desde el cierre; sin purga automática ([retencion.md](retencion.md)). |
 | RN18 | Indicadores anuales: operaciones de préstamo por curso y ejemplares prestados por libro. | `sp_kpis_anuales`; renovaciones no aumentan los conteos. |
-| RN19 | Se requieren avisos por correo. | Correo en usuarios, cola de avisos y envío SMTP configurable con registro de estados y cancelación de resueltos; quedan por acordar la cuenta real y la frecuencia. |
+| RN19 | Se requieren avisos por correo. | Cola deduplicada, envío SMTP, hasta 3 intentos, cancelación de resueltos, envío diario automático opcional y panel Avisos ([avisos.md](avisos.md)); quedan por acordar la cuenta real y la frecuencia. |
 
 ## Convenciones de esta implementación que deben validarse
 
@@ -35,7 +35,9 @@ Origen de requisitos: cuestionario de la biblioteca y aclaraciones transmitidas 
 - La pantalla de vacaciones pide el lunes de la última semana de clases y aplica lunes a viernes anteriores al inicio, conservando los cierres existentes. Esta selección debe corresponder al calendario entregado por el colegio. Solo se modifican días desde hoy; completar un año no incorpora feriados oficiales automáticamente.
 - Una reposición requiere una copia nueva de la misma edición y código nuevo. Si la biblioteca acepta títulos equivalentes o reutiliza códigos, adaptar la regla.
 - Resolver una incidencia no levanta una sanción independiente todavía vigente. No se genera automáticamente una sanción grave de dos semanas por toda pérdida: el bloqueo por incidencia es independiente y la sanción grave se registra cuando corresponda.
-- La cola permite generar como máximo un aviso por préstamo y fecha, solo cuando se llama al procedimiento. Esto no establece una frecuencia automática acordada con la biblioteca.
+- La cola genera como máximo un aviso por préstamo y fecha. El envío automático propuesto es diario en días de atención (`AVISOS_HORA`, 08:30 por defecto); la frecuencia final debe acordarse con la biblioteca.
+- La conservación de diez años se cuenta desde el cierre del último ejemplar del préstamo.
+- La fotografía del usuario no se almacena: no la exige ninguna regla y aumenta los datos personales tratados. Se puede agregar si el colegio la pide.
 - El indicador por libro agrupa por edición (`libro.id`); si se quiere agrupar distintas ediciones de una obra, habrá que introducir esa distinción.
 - La resolución de una incidencia registra lo aceptado por la bibliotecaria; el sistema no decide el precio de reembolso.
 
@@ -63,8 +65,8 @@ La fotografía no se incluye en esta primera base: era un dato mencionado en la 
 
 ## Pendiente para la integración y la entrega completa
 
-ABIES: versión, instalación y permisos, formatos de intercambio, identificadores externos y sistema responsable de cada registro. No se promete escritura directa en su base ni sincronización automática.
+ABIES: versión, instalación y permisos, formatos de intercambio, identificadores externos y sistema responsable de cada registro. No se promete escritura directa en su base ni sincronización automática. Propuesta y preguntas en [abies.md](abies.md).
 
-Aplicación: la interfaz local y la API de consulta/escritura ya están implementadas. La API toma la fecha del servidor para circulación y no admite fechas enviadas por los formularios. La consulta a Google Books está implementada, cubierta por pruebas con proveedor simulado y verificada con una consulta real y guardado desde el formulario. El envío de avisos por SMTP ya está implementado y probado con un transporte simulado: prepara, envía, registra estados y errores, y cancela los recordatorios ya resueltos. Quedan por acordar el proveedor/cuenta SMTP real, la frecuencia y un reintento automático. Los avisos de docentes y asistentes requerirán registrar su correo si también deben recibirlos. Antes de usar la aplicación fuera de este prototipo local se deben definir las cuentas de acceso y roles de operadores.
+Aplicación: interfaz local, API, Google Books (verificado con una consulta real), avisos SMTP con reintentos y envío diario, cuentas con roles, auditoría, validación de RUT e ISBN, respaldos y conservación están implementados y probados ([seguridad.md](seguridad.md), [avisos.md](avisos.md)). Falta: cuenta SMTP real del colegio y frecuencia acordada; calendario real validado; correo de docentes y asistentes si también deben recibir avisos; prueba con PostgreSQL nativo y varias sesiones simultáneas (en este equipo no hay servidor PostgreSQL ni Docker); HTTPS si se publica en la red del colegio.
 
-Académico: ficha/autorización y evidencias de entrevistas; explicación completa de transformación E-R a relacional, dependencias funcionales y normalización; decisiones del negocio que sustentan los dos indicadores; capturas de pruebas e informe final. Esta base inicial no equivale a la entrega completa.
+Académico: la transformación E-R → relacional, las dependencias funcionales, la normalización, los KPIs y la trazabilidad están en [normalizacion.md](normalizacion.md). Falta que el grupo adjunte la evidencia del cliente (ficha, autorización, entrevistas), las capturas para el informe y la presentación.

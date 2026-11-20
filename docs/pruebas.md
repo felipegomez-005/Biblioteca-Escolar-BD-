@@ -2,7 +2,7 @@
 
 ## Ejecución
 
-`npm.cmd test` ejecuta 87 pruebas: 29 de base de datos, 13 de API general, 12 de ISBN/Google Books, 15 de calendario, 10 de sanciones, 5 escenarios de administración y 3 de respaldos. Se crean bases nuevas en memoria y se ejecutan los scripts de inicialización, incluidas las actualizaciones aditivas. Cada caso ordinario de base se revierte al terminar; los casos de COMMIT/ROLLBACK se ejecutan por separado porque prueban control explícito de transacciones. Las pruebas HTTP usan un puerto local libre y su propia base temporal. Las pruebas de respaldo usan carpetas independientes `.local/backup-test-*`; no modifican `.local/biblioteca/`.
+`npm.cmd test` ejecuta 118 pruebas: 29 de base de datos, 13 de API general, 12 de ISBN/Google Books, 15 de calendario, 10 de sanciones, 5 escenarios de administración, 3 de respaldos, 13 de avisos, 4 de corrección y 14 de seguridad, RUT y conservación. Se crean bases nuevas en memoria y se ejecutan los scripts de inicialización, incluidas las actualizaciones aditivas. Cada caso ordinario de base se revierte al terminar; los casos de COMMIT/ROLLBACK se ejecutan por separado porque prueban control explícito de transacciones. Las pruebas HTTP usan un puerto local libre y su propia base temporal. Las pruebas de respaldo usan carpetas independientes `.local/backup-test-*`; no modifican `.local/biblioteca/`.
 
 ## Casos cubiertos
 
@@ -24,7 +24,7 @@ Cada prueba tiene un nombre, pasos SQL y resultado verificable en `tests/bibliot
 
 ## Límites
 
-La prueba se ejecuta en PGlite, que utiliza PostgreSQL dentro de un proceso. Se verifica la API HTTP local y la integración de Google Books con respuestas simuladas, pero no un servidor PostgreSQL nativo, sesiones de base simultáneas, correo SMTP ni ABIES. La consulta real de Google Books con clave propia se comprobó por separado, como se detalla más abajo. Los fallos de concurrencia/reintentos y el rendimiento con grandes volúmenes requieren pruebas adicionales cuando se configure un servidor.
+La prueba se ejecuta en PGlite, que utiliza PostgreSQL dentro de un proceso. Se verifica la API HTTP local y la integración de Google Books con respuestas simuladas, pero no un servidor PostgreSQL nativo, sesiones de base simultáneas ni ABIES. El correo SMTP se prueba contra un servidor SMTP local de prueba (AVISOS 10), no contra la cuenta del colegio. La consulta real de Google Books con clave propia se comprobó por separado, como se detalla más abajo. Los fallos de concurrencia/reintentos y el rendimiento con grandes volúmenes requieren pruebas adicionales cuando se configure un servidor.
 
 ## API e interfaz
 
@@ -113,3 +113,42 @@ Resultado de una única ejecución conjunta al terminar el bloque: **87/87 prueb
 El ensayo usa datos ficticios y archivos locales de prueba. No se ha creado todavía un respaldo de la base utilizada por el usuario ni se ha ensayado su activación como base principal. La restauración automática escribe siempre en una carpeta nueva. Las instrucciones están en `docs/respaldos.md`.
 
 Recorrido pendiente del buscador: en Nuevo préstamo escribir parte de un nombre (con o sin tilde) o una identificación; seleccionar una coincidencia; comprobar los bloqueos y cupo; escribir otra búsqueda y verificar que se borre la selección anterior; probar un texto sin resultados y limpiar la búsqueda. Repetir en devoluciones.
+
+## Avisos, cuentas, auditoría, RUT y conservación — 19 de noviembre de 2026
+
+Resultado de la suite completa: **118/118 pruebas aprobadas** (`npm.cmd test`).
+
+| Casos | Resultado comprobado |
+|---|---|
+| AVISOS 01–05 | Prepara, envía y registra `enviado`; cancela si el ejemplar ya se devolvió; registra el error sin marcar enviado; no reenvía; el texto incluye nombre, títulos y códigos. |
+| AVISOS 06–08 | Reintenta un error hasta 3 intentos y luego se detiene; un aviso fallido no se reintenta si ya existe el del día siguiente. |
+| AVISOS 09 | Día sin atención: no genera avisos nuevos y no falla. |
+| AVISOS 10 | Envío real con nodemailer contra un servidor SMTP local levantado por la prueba: el servidor recibe el mensaje con remitente, asunto y código del ejemplar, y el aviso queda `enviado`. |
+| AVISOS 11 | La programación diaria calcula la próxima ejecución (hoy o mañana) y se reprograma tras ejecutar o fallar. |
+| AVISOS 12 | Panel por API: listado por estado, preparación, envío manual y respuesta cuando SMTP no está configurado. |
+| AVISOS 13 | Dos avisos pendientes del mismo préstamo: se envía un solo correo (el más reciente) y el antiguo queda `cancelado`. |
+| CORR 01–04 | Anulación con motivo, sin borrar historial; rechaza préstamos cerrados y copias con incidencia; la corrección es inmutable. |
+| SEG 01–02 | Sin sesión responde 401; la cuenta inicial se crea una sola vez, cookie `HttpOnly`/`SameSite=Strict`, contraseña guardada como hash scrypt. |
+| SEG 03–04 | Altas de operadores por rol; login incorrecto rechazado y auditado; consulta solo lee, bibliotecaria no administra, admin sí. |
+| SEG 05–06 | Cada escritura queda con el operador y sin contraseñas; la auditoría no admite `UPDATE` ni `DELETE`. |
+| SEG 07–10 | Siempre queda un admin activo; desactivar cierra la sesión; cerrar sesión invalida la cookie; bloqueo tras 5 fallos; funciones de hash y permisos. |
+| RUT 01–02 | Normaliza puntos y guion y valida el dígito verificador en la API y en la base; otros identificadores se aceptan. |
+| RET 01–02 | Conservación solo para admin; un préstamo cerrado en 2014 aparece con `conservar_hasta = 2024-03-05`, uno abierto no, y el historial sigue sin admitir `DELETE`. |
+
+### Recorrido en navegador
+
+Sobre una base temporal (`BIBLIOTECA_PRUEBA=1`) en http://127.0.0.1:3100:
+
+1. Primera apertura: aparece el formulario de cuenta inicial; se crea la cuenta admin y entra a Inicio.
+2. Cerrar sesión e ingresar con contraseña incorrecta: mensaje de error, sin acceso.
+3. Avisos: tarjetas de SMTP (sin configurar), envío automático y última ejecución; "Preparar avisos de hoy" genera los pendientes; "Enviar ahora" desactivado sin SMTP.
+4. Administración: crear un operador de consulta; aparece en la tabla y en la auditoría; la fecha de creación se muestra en hora local.
+5. Ingresar como consulta: insignia "Solo lectura", sin menú Administración ni botones de alta; una escritura forzada responde "Su perfil es de solo consulta." (403).
+6. Recargar la página conserva la sesión; en ancho de teléfono la barra superior se reorganiza sin desbordar.
+
+Durante el recorrido se corrigieron: fecha de creación desplazada un día por zona horaria, datos de administración que quedaban en el DOM tras cerrar sesión y botones del encabezado que se partían en dos líneas.
+
+### No verificado
+
+- Envío con la cuenta SMTP real del colegio (no se tienen credenciales).
+- PostgreSQL nativo con varias sesiones simultáneas: en este equipo no hay servidor PostgreSQL ni Docker. Las escrituras de circulación se serializan con `control_operacion`; queda por ejecutar dos clientes `psql` que presten la misma copia a la vez y comprobar que uno recibe el error.

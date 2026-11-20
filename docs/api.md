@@ -64,7 +64,24 @@ Ejemplo: `http://127.0.0.1:3000/api/estadisticas?anio=2026`.
 
 ## Escrituras
 
-Los formularios usan JSON con `Content-Type: application/json` y `X-Biblioteca-Request: 1`. El servidor solo acepta el mismo origen local, limita el tamaño del cuerpo y usa parámetros SQL. Las rutas no constituyen una API pública autenticada: este prototipo no tiene cuentas de bibliotecarios.
+Los formularios usan JSON con `Content-Type: application/json` y `X-Biblioteca-Request: 1`. El servidor solo acepta el mismo origen local, limita el tamaño del cuerpo y usa parámetros SQL. Todas las rutas `/api/*`, salvo las de sesión, exigen la cookie de sesión (401 sin ella) y el rol correspondiente (403). Cada escritura queda en `auditoria`. Detalle de roles en [seguridad.md](seguridad.md).
+
+### Sesión, avisos y administración
+
+| Método / ruta | Rol | Datos y resultado |
+|---|---|---|
+| `GET /api/sesion` | — | `requiere`, `configurado` (existe alguna cuenta) y el operador de la sesión o `null`. |
+| `POST /api/sesion/inicial` | — | `usuario`, `nombre`, `clave`. Crea la primera cuenta admin; 409 si ya existe alguna. |
+| `POST /api/sesion` | — | `usuario`, `clave`. Inicia sesión; 401 si no corresponde, 429 tras 5 fallos. |
+| `POST /api/sesion/salir` | — | Cierra la sesión y borra la cookie. |
+| `GET /api/avisos?estado=` | todos | Estado de SMTP, programación automática, última ejecución, resumen y últimos 300 avisos. |
+| `POST /api/avisos/preparar` | admin, bibliotecaria | Genera los avisos del día sin enviarlos. |
+| `POST /api/avisos/enviar` | admin, bibliotecaria | Prepara, cancela resueltos, envía y reintenta; 409 si SMTP no está configurado. |
+| `GET /api/operadores` · `POST /api/operadores` · `PATCH /api/operadores/:id` | admin | Lista, alta (`usuario`, `nombre`, `rol`, `clave`) y edición (`nombre`, `rol`, `activo`, `clave` opcional). |
+| `GET /api/auditoria?operador=&limite=` | admin | Registros más recientes primero (máximo 1000). |
+| `GET /api/retencion` | admin | Préstamos que superan los diez años desde el cierre y auditoría antigua. |
+
+### Operaciones
 
 | Método / ruta | Datos principales |
 |---|---|
@@ -80,7 +97,7 @@ Los formularios usan JSON con `Content-Type: application/json` y `X-Biblioteca-R
 | `POST /api/renovaciones` | `usuario_id`, `detalles`. |
 | `POST /api/incidencias` | `detalle_id`, `tipo` (`perdida`/`dano_permanente`), `observaciones`. |
 | `POST /api/incidencias/:id/resolver` | `solucion` (`reposicion`/`reembolso`), `codigo` nuevo o `monto` recibido. |
-| `POST /api/anulaciones` | `prestamo_id`, `motivo` obligatorio, `operador` y `observaciones` opcionales. Cierra los ejemplares abiertos y registra la corrección conservando el historial. |
+| `POST /api/anulaciones` | Solo admin. `prestamo_id`, `motivo` obligatorio, `observaciones` opcional. El operador se toma de la sesión. Cierra los ejemplares abiertos y registra la corrección conservando el historial. |
 | `POST /api/calendario/previsualizar` | `tipo`, `desde`, `hasta`, `motivo`; vacaciones añade `ultima_semana`. Para completar faltantes: `tipo='completar'`, `anio`. No escribe datos. |
 | `POST /api/calendario/configurar` | La misma propuesta y su `version`. Revalida conflictos y guarda todo junto con su historial. |
 
@@ -106,4 +123,4 @@ El registro de sanciones y sus bloqueos pasaron las pruebas HTTP y de base de da
 
 La edición, el historial y la condición de devolución se verifican en conjunto en `tests/administration.test.mjs`. La revisión visual de estas pantallas sigue pendiente. El historial consulta todos los movimientos de ese usuario o ejemplar; aún no tiene paginación. La edición bibliográfica no conserva versiones anteriores de títulos/autores ni registra al operador; sí conserva los identificadores de préstamos y copias.
 
-Pendiente: autenticación de operadores, permisos en un servidor de producción, paginación para grandes catálogos, corrección administrativa de otros movimientos (la anulación de préstamos ya está implementada), integración con ABIES (pospuesta), configuración de la cuenta SMTP real de avisos y fechas reales del calendario. No se ha publicado el sitio.
+Pendiente: HTTPS para uso en red, paginación para grandes catálogos, corrección administrativa de otros movimientos (la anulación de préstamos ya está implementada), integración con ABIES (pospuesta), configuración de la cuenta SMTP real de avisos y fechas reales del calendario. No se ha publicado el sitio.

@@ -1,9 +1,8 @@
 import { mkdir, open, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { loadEnvFile } from 'node:process';
-import nodemailer from 'nodemailer';
 import { openDb, root } from './db.mjs';
-import { enviarAvisos } from './avisos-lib.mjs';
+import { enviarAvisos, smtpConfig, crearEnviador } from './avisos-lib.mjs';
 
 try { loadEnvFile(path.join(root, '.env')); }
 catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -19,17 +18,7 @@ await mkdir(local, { recursive: true });
 const lockPath = path.join(local, 'biblioteca.lock');
 let lock;
 try { lock = await open(lockPath, 'wx'); }
-catch { throw new Error('La base local está en uso. Cierre la otra operación antes de continuar.'); }
-
-function crearTransporter() {
-  const host = process.env.SMTP_HOST;
-  const from = process.env.SMTP_FROM;
-  if (!host || !from) throw new Error('Configure SMTP_HOST y SMTP_FROM en .env para enviar avisos (o use --simular).');
-  const port = Number(process.env.SMTP_PORT || 587);
-  const secure = (process.env.SMTP_SECURE || 'false') === 'true';
-  const auth = process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS || '' } : undefined;
-  return nodemailer.createTransport({ host, port, secure, auth });
-}
+catch { throw new Error('La base local está en uso (¿la aplicación está abierta?). Use «Enviar ahora» en la pantalla Avisos o cierre la aplicación.'); }
 
 let db;
 try {
@@ -43,27 +32,25 @@ try {
     const [{ n }] = (await db.query("SELECT count(*)::integer AS n FROM biblioteca.aviso_correo WHERE estado = 'pendiente'")).rows;
     console.log(`Avisos pendientes preparados: ${n}.`);
   } else if (simular) {
-    await db.query('CALL biblioteca.sp_preparar_avisos($1)', [fecha]);
-    const pendientes = (await db.query(
-      `SELECT a.prestamo_id, a.destinatario, a.asunto
-       FROM biblioteca.aviso_correo a
-       WHERE a.estado = 'pendiente' ORDER BY a.id`)).rows;
-    console.log(`Simulación (${fecha}): ${pendientes.length} avisos pendientes. No se envió ni modificó nada.`);
-    for (const p of pendientes) console.log(`  - ${p.destinatario} · ${p.asunto}`);
+    await db.exec('BEGIN');
+    try {
+      await db.query('CALL biblioteca.sp_preparar_avisos($1)', [fecha]);
+      const pendientes = (await db.query(
+        `SELECT a.destinatario, a.asunto, a.estado FROM biblioteca.aviso_correo a
+         WHERE a.estado IN ('pendiente','error') ORDER BY a.id`)).rows;
+      console.log(`Simulación (${fecha}): ${pendientes.length} avisos por enviar o reintentar. No se envió ni guardó nada.`);
+      for (const p of pendientes) console.log(`  - ${p.destinatario} · ${p.asunto} (${p.estado})`);
+    } finally { await db.exec('ROLLBACK'); }
   } else {
-    const transporter = crearTransporter();
-    const sendMail = async m => {
-      await transporter.sendMail({ from: process.env.SMTP_FROM, to: m.destinatario, subject: m.asunto, text: m.texto });
-    };
+    const sendMail = await crearEnviador(smtpConfig());
+    if (!sendMail) throw new Error('Configure SMTP_HOST y SMTP_FROM en .env para enviar avisos (o use --simular).');
     const res = await enviarAvisos(db, { sendMail, fecha });
+    if (res.cerrada) console.log('Hoy la biblioteca no atiende: no se generaron avisos nuevos.');
     console.log(`Avisos procesados: ${res.pendientes}. Enviados: ${res.enviados}. Cancelados: ${res.cancelados}. Errores: ${res.errores}.`);
   }
 } catch (error) {
-  if (/Biblioteca cerrada/.test(error?.message || '')) {
-    console.log('Hoy la biblioteca está cerrada: no se generan ni envían avisos.');
-  } else {
-    throw error;
-  }
+  if (/Biblioteca cerrada/.test(error?.message || '')) console.log('Hoy la biblioteca está cerrada: no se generan ni envían avisos.');
+  else throw error;
 } finally {
   try { if (db) await db.close(); }
   finally { await lock.close(); await unlink(lockPath); }

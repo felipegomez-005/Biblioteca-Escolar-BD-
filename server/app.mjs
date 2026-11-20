@@ -7,6 +7,8 @@ import { CalendarError,readCalendar,previewCalendar,saveCalendar } from './calen
 import { SanctionError,readSanctions,registerSanction } from './sanctions.mjs';
 import {readBook,editBook} from './catalog-edit.mjs';
 import {readHistory} from './history.mjs';
+import {AuthError,ROLES,authorize,createSessions,hashPassword,verifyPassword,validPassword,validUsername,readCookie,sessionCookie,auditDetail} from './auth.mjs';
+import {enviarAvisos,MAX_INTENTOS} from '../scripts/avisos-lib.mjs';
 
 class InputError extends Error { constructor(message,status=400) { super(message); this.status=status; } }
 function text(value,label,max=250,required=true) {
@@ -39,6 +41,20 @@ function email(value,required) {
   if(result && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(result)) throw new InputError('Ingrese un correo válido.');
   return result;
 }
+// RUT chileno: si el identificador tiene forma de RUT se normaliza (sin puntos, con guion,
+// K mayúscula) y se valida su dígito verificador. Otros identificadores se aceptan tal cual.
+export function normalizeIdentifier(value) {
+  const raw=text(value,'Identificación',60);
+  if(!/^[0-9.]+-?[0-9kK]$/.test(raw)) return raw;
+  const clean=raw.replace(/\./g,'').replace('-','').toUpperCase();
+  const body=clean.slice(0,-1),dv=clean.slice(-1);
+  if(body.length<7 || body.length>8) throw new InputError('RUT inválido: revise la cantidad de dígitos.');
+  let sum=0,factor=2;
+  for(let i=body.length-1;i>=0;i--){sum+=Number(body[i])*factor;factor=factor===7?2:factor+1;}
+  const expected={11:'0',10:'K'}[11-sum%11] ?? String(11-sum%11);
+  if(dv!==expected) throw new InputError('RUT inválido: el dígito verificador no corresponde.');
+  return `${body}-${dv}`;
+}
 async function body(req) {
   const chunks=[];let size=0;
   for await (const part of req) {
@@ -52,7 +68,8 @@ async function body(req) {
   } catch { throw new InputError('No se pudo leer el formulario.'); }
 }
 function friendly(error) {
-  if(error instanceof InputError || error instanceof CatalogError || error instanceof CalendarError || error instanceof SanctionError) return {status:error.status,message:error.message};
+  if(error instanceof InputError || error instanceof CatalogError || error instanceof CalendarError || error instanceof SanctionError || error instanceof AuthError) return {status:error.status,message:error.message};
+  if(error.code==='23514' && /usuario_rut_valido/.test(error.message)) return {status:400,message:'RUT inválido: el dígito verificador no corresponde.'};
   if(error.code==='23505') return {status:409,message:'Ya existe un registro con ese ISBN, código o identificación. Revise los datos antes de guardar.'};
   if(error.code==='23503' || error.code==='P0002') return {status:404,message:'El registro seleccionado ya no está disponible. Actualice la página.'};
   if(error.code==='23514' || error.code==='23502') return {status:400,message:'Revise los campos obligatorios y sus valores.'};
@@ -61,15 +78,115 @@ function friendly(error) {
   return {status:500,message:'No se pudo completar la operación. Los cambios de esta operación no se guardaron.'};
 }
 
-export function createApp(db,{today,googleBooks=createGoogleBooks()}={}) {
+// Opciones:
+//  requireAuth: exige sesión y aplica permisos por rol (start.mjs lo activa; las pruebas de API lo omiten).
+//  sendMail:    función de envío SMTP (null si no hay SMTP configurado).
+//  sessions:    almacén de sesiones (inyectable para pruebas).
+export function createApp(db,{today,googleBooks=createGoogleBooks(),requireAuth=false,sendMail=null,sessions=createSessions()}={}) {
   const q=async(sql,args=[]) => (await db.query(sql,args)).rows;
   const date=async()=>today || (await q('SELECT CURRENT_DATE::text AS fecha'))[0].fecha;
   let tail=Promise.resolve();
   // Una sola cola para la conexión local: los formularios no intercalan transacciones.
   const exclusive=fn=>{ const next=tail.then(fn); tail=next.catch(()=>{}); return next; };
+  const avisosEstado={programacion:null,ultimo:null};
 
-  async function api(method,url,b) {
+  // Auditoría: una fila inmutable por operación de escritura, inicio de sesión o rechazo de permisos.
+  async function audit(op,accion,ruta,resultado,detalle={}) {
+    try {
+      await q('INSERT INTO biblioteca.auditoria(operador_id,operador,accion,ruta,resultado,detalle) VALUES($1,$2,$3,$4,$5,$6)',
+        [op?.id||null,op?.usuario||op?.etiqueta||'sin sesión',accion,ruta,resultado,JSON.stringify(detalle)]);
+    } catch(error) { console.error('No se pudo registrar la auditoría:',error.message); }
+  }
+
+  async function runAvisos(origen,op) {
+    if(!sendMail) throw new InputError('El envío de correos no está configurado. Complete SMTP_HOST y SMTP_FROM en .env y reinicie la aplicación.',409);
+    const result=await enviarAvisos(db,{sendMail,fecha:await date()});
+    avisosEstado.ultimo={...result,origen,en:new Date().toISOString()};
+    if(origen!=='manual') await audit({etiqueta:'sistema (programado)'},'POST','/api/avisos/enviar','ok',{origen,...result});
+    return result;
+  }
+
+  async function sessionRoute(method,p,b,token,session) {
+    const operadores=(await q('SELECT count(*)::integer AS n FROM biblioteca.operador'))[0].n;
+    if(method==='GET' && p==='/api/sesion') return {data:{requiere:requireAuth,configurado:operadores>0,operador:session?{usuario:session.usuario,nombre:session.nombre,rol:session.rol}:null}};
+    if(method==='POST' && p==='/api/sesion/inicial') {
+      if(operadores>0) throw new AuthError('La cuenta de administración ya fue creada. Inicie sesión.',409);
+      const usuario=validUsername(b.usuario),nombre=text(b.nombre,'Nombre',120),hash=await hashPassword(validPassword(b.clave));
+      const op=(await q("INSERT INTO biblioteca.operador(usuario,nombre,rol,clave_hash) VALUES($1,$2,'admin',$3) RETURNING id,usuario,nombre,rol",[usuario,nombre,hash]))[0];
+      await audit(op,'POST',p,'ok',{usuario});
+      return {data:{operador:{usuario:op.usuario,nombre:op.nombre,rol:op.rol}},cookie:sessions.create(op)};
+    }
+    if(method==='POST' && p==='/api/sesion') {
+      const usuario=typeof b.usuario==='string'?b.usuario.trim().toLowerCase().slice(0,40):'';
+      sessions.checkLock(usuario);
+      const op=(await q('SELECT * FROM biblioteca.operador WHERE usuario=$1 AND activo',[usuario]))[0];
+      if(!op || typeof b.clave!=='string' || !(await verifyPassword(b.clave,op.clave_hash))) {
+        sessions.fail(usuario);
+        await audit({id:op?.id,etiqueta:usuario||'(vacío)'},'POST',p,'rechazado',{motivo:'credenciales inválidas'});
+        throw new AuthError('Usuario o contraseña incorrectos.');
+      }
+      sessions.success(usuario);
+      await audit(op,'POST',p,'ok',{});
+      return {data:{operador:{usuario:op.usuario,nombre:op.nombre,rol:op.rol}},cookie:sessions.create(op)};
+    }
+    if(method==='POST' && p==='/api/sesion/salir') {
+      if(session) await audit(session,'POST',p,'ok',{});
+      sessions.destroy(token);
+      return {data:{cerrada:true},cookie:null};
+    }
+    throw new InputError('Ruta no encontrada.',404);
+  }
+
+  async function api(method,url,b,op) {
     const p=url.pathname, d=await date();
+    if(method==='GET' && p==='/api/avisos') {
+      const estado=url.searchParams.get('estado');
+      if(estado && !['pendiente','enviado','error','cancelado'].includes(estado)) throw new InputError('Estado inválido.');
+      return {
+        smtp:Boolean(sendMail),max_intentos:MAX_INTENTOS,
+        automatico:avisosEstado.programacion?{hora:avisosEstado.programacion.hora,proxima:avisosEstado.programacion.proxima}:null,
+        ultimo:avisosEstado.ultimo,
+        resumen:await q('SELECT estado,count(*)::integer AS cantidad FROM biblioteca.aviso_correo GROUP BY estado ORDER BY estado'),
+        avisos:await q(`SELECT a.id,a.prestamo_id,a.fecha_generacion::text AS fecha,a.destinatario,u.nombre,a.estado,a.intentos,
+          a.enviado_en,a.ultimo_intento,a.error_detalle FROM biblioteca.aviso_correo a
+          JOIN biblioteca.prestamo p ON p.id=a.prestamo_id JOIN biblioteca.usuario u ON u.id=p.usuario_id
+          WHERE $1::text IS NULL OR a.estado=$1 ORDER BY a.fecha_generacion DESC,a.id DESC LIMIT 300`,[estado||null])
+      };
+    }
+    if(method==='POST' && p==='/api/avisos/preparar') {
+      await q('CALL biblioteca.sp_preparar_avisos($1)',[d]);
+      return (await q("SELECT count(*)::integer AS pendientes FROM biblioteca.aviso_correo WHERE estado='pendiente'"))[0];
+    }
+    if(method==='POST' && p==='/api/avisos/enviar') return runAvisos('manual',op);
+    if(method==='GET' && p==='/api/operadores') return q('SELECT id,usuario,nombre,rol,activo,creado_en FROM biblioteca.operador ORDER BY usuario');
+    if(method==='POST' && p==='/api/operadores') {
+      const hash=await hashPassword(validPassword(b.clave));
+      return (await q('INSERT INTO biblioteca.operador(usuario,nombre,rol,clave_hash) VALUES($1,$2,$3,$4) RETURNING id',
+        [validUsername(b.usuario),text(b.nombre,'Nombre',120),oneOf(b.rol,ROLES,'Rol'),hash]))[0];
+    }
+    const opEdit=p.match(/^\/api\/operadores\/(\d+)$/);
+    if(method==='PATCH' && opEdit) {
+      const oid=id(opEdit[1]),rol=oneOf(b.rol,ROLES,'Rol');
+      if(typeof b.activo!=='boolean') throw new InputError('Estado inválido.');
+      const admins=(await q("SELECT count(*)::integer AS n FROM biblioteca.operador WHERE rol='admin' AND activo AND id<>$1",[oid]))[0].n;
+      if(admins===0 && (rol!=='admin' || !b.activo)) throw new InputError('Debe quedar al menos una cuenta de administración activa.',409);
+      const hash=b.clave?await hashPassword(validPassword(b.clave)):null;
+      const updated=(await q('UPDATE biblioteca.operador SET nombre=$1,rol=$2,activo=$3,clave_hash=coalesce($4,clave_hash) WHERE id=$5 RETURNING id',
+        [text(b.nombre,'Nombre',120),rol,b.activo,hash,oid]))[0];
+      if(!updated) throw new InputError('Operador no encontrado.',404);
+      sessions.dropOperator(oid);
+      return updated;
+    }
+    if(method==='GET' && p==='/api/auditoria') {
+      const limit=Math.min(Number(url.searchParams.get('limite'))||200,1000);
+      return q(`SELECT id,registrado_en,operador,accion,ruta,resultado,detalle FROM biblioteca.auditoria
+        WHERE ($1::text IS NULL OR operador=$1) ORDER BY id DESC LIMIT $2`,[url.searchParams.get('operador')||null,limit]);
+    }
+    if(method==='GET' && p==='/api/retencion') return {
+      politica_anios:10,
+      prestamos:await q('SELECT prestamo_id,usuario_id,fecha_prestamo::text,fecha_cierre::text,conservar_hasta::text FROM biblioteca.v_retencion ORDER BY fecha_cierre LIMIT 500'),
+      auditoria_antigua:(await q("SELECT count(*)::integer AS n FROM biblioteca.auditoria WHERE registrado_en < now()-interval '10 years'"))[0].n
+    };
     const history=p.match(/^\/api\/(usuarios|ejemplares)\/(\d+)\/historial$/);
     if(method==='GET' && history)return readHistory(db,history[1],id(history[2]));
     const edit=p.match(/^\/api\/libros\/(\d+)$/);
@@ -213,7 +330,7 @@ export function createApp(db,{today,googleBooks=createGoogleBooks()}={}) {
     const editUser=p.match(/^\/api\/usuarios\/(\d+)$/);
     if((method==='POST' && p==='/api/usuarios') || (method==='PATCH' && editUser)) {
       const tipo=oneOf(b.tipo,['estudiante','docente','asistente'],'Tipo de usuario');
-      const values=[text(b.identificador,'Identificación',60),text(b.nombre,'Nombre',150),tipo,email(b.correo,tipo==='estudiante'),
+      const values=[normalizeIdentifier(b.identificador),text(b.nombre,'Nombre',150),tipo,email(b.correo,tipo==='estudiante'),
         tipo==='estudiante'?id(b.curso_actual_id,'Curso'):null,tipo==='estudiante'?null:text(b.cargo,'Cargo',150,false)];
       if(method==='POST') return (await q('INSERT INTO biblioteca.usuario(identificador,nombre,tipo,correo,curso_actual_id,cargo) VALUES($1,$2,$3,$4,$5,$6) RETURNING id',values))[0];
       if(typeof b.activo!=='boolean') throw new InputError('Estado de usuario inválido.');
@@ -249,7 +366,7 @@ export function createApp(db,{today,googleBooks=createGoogleBooks()}={}) {
     }
     if(method==='POST' && p==='/api/anulaciones') {
       await q('CALL biblioteca.sp_anular_prestamo($1,$2,$3,$4,$5)',[
-        id(b.prestamo_id),text(b.motivo,'Motivo',1000),d,text(b.operador,'Operador',120,false),text(b.observaciones,'Observaciones',1000,false)]);
+        id(b.prestamo_id),text(b.motivo,'Motivo',1000),d,op?.nombre?`${op.nombre} (${op.usuario})`:text(b.operador,'Operador',120,false),text(b.observaciones,'Observaciones',1000,false)]);
       return {anulado:true};
     }
     throw new InputError('Ruta no encontrada.',404);
@@ -279,10 +396,25 @@ export function createApp(db,{today,googleBooks=createGoogleBooks()}={}) {
         if(req.headers['x-biblioteca-request']!=='1' || !req.headers['content-type']?.startsWith('application/json')) throw new InputError('Solicitud de formulario no válida.',403);
         input=await body(req);
       }
-      const data=await exclusive(()=>api(req.method,url,input));
-      json(req.method==='POST'?201:200,data);
+      const token=readCookie(req.headers.cookie),session=sessions.get(token),p=url.pathname;
+      const result=await exclusive(async()=>{
+        if(p==='/api/sesion' || p.startsWith('/api/sesion/')) return sessionRoute(req.method,p,input,token,session);
+        if(requireAuth) {
+          if(!session) throw new AuthError('Inicie sesión para continuar.');
+          try { authorize(session.rol,req.method,p); }
+          catch(error) { await audit(session,req.method,p,'rechazado',{motivo:error.message}); throw error; }
+        }
+        const data=await api(req.method,url,input,session);
+        if(req.method!=='GET') await audit(session,req.method,p,'ok',auditDetail(input));
+        return {data};
+      });
+      if(result.cookie!==undefined) res.setHeader('Set-Cookie',sessionCookie(result.cookie));
+      json(req.method==='POST'?201:200,result.data);
     } catch(error) { const problem=friendly(error); json(problem.status,{error:problem.message}); }
   });
   server.requestTimeout=15000;
+  // Envío programado: lo usa start.mjs; pasa por la misma cola que los formularios.
+  server.enviarAvisosProgramados=()=>exclusive(()=>runAvisos('programado'));
+  server.avisosEstado=avisosEstado;
   return server;
 }
