@@ -11,6 +11,7 @@
 \usepackage{tabularx}
 \usepackage{array}
 \usepackage{longtable}
+\usepackage{float}
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{hyperref}
@@ -26,6 +27,7 @@
 \setlength{\parskip}{6pt}
 \renewcommand{\arraystretch}{1.25}
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
 \newcommand{\pend}[1]{\textcolor{red!70!black}{[#1]}}
 
 % Encabezado institucional en todas las páginas
@@ -130,7 +132,7 @@ No hubo reuniones ni entrevistas con un cliente real. El grupo definió los requ
 
 \subsubsection{Reglas de negocio}
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \caption{Reglas de negocio del caso.}
 \begin{tabularx}{\textwidth}{l Y Y}
@@ -154,6 +156,11 @@ Durante el desarrollo se precisaron las siguientes reglas complementarias, que l
 
 \begin{longtable}{@{}l p{0.52\textwidth} p{0.33\textwidth}@{}}
 \caption{Reglas de negocio complementarias.}\\
+\toprule
+\textbf{N.º} & \textbf{Regla de negocio} & \textbf{Fuente}\\
+\midrule
+\endfirsthead
+\caption[]{Reglas de negocio complementarias (continuación).}\\
 \toprule
 \textbf{N.º} & \textbf{Regla de negocio} & \textbf{Fuente}\\
 \midrule
@@ -202,27 +209,36 @@ El modelo implementado tiene 20 entidades, agrupadas en tres vistas: Catálogo, 
 
 \subsubsection{Entidades y atributos}
 
-\textbf{Submodelo Catálogo}
-
-\begin{tabularx}{\textwidth}{l Y Y}
+\begin{longtable}{@{}l P{0.36\textwidth} P{0.36\textwidth}@{}}
+\multicolumn{3}{@{}l}{\textbf{Submodelo Catálogo}}\\
 \toprule
 \textbf{Entidad} & \textbf{Atributos} & \textbf{Descripción}\\
 \midrule
+\endfirsthead
+\multicolumn{3}{@{}l}{\textbf{Submodelo Catálogo (continuación)}}\\
+\toprule
+\textbf{Entidad} & \textbf{Atributos} & \textbf{Descripción}\\
+\midrule
+\endhead
 \texttt{Editorial} & ID, nombre (único) & Editorial de los libros publicados.\\
 \texttt{Libro} & ID, título, ISBN (único, 10 o 13 dígitos), año de publicación, origen de los datos (manual o Google Books), ID de Google Books & Representa la edición y sus datos bibliográficos.\\
 \texttt{Autor} & ID, nombre & Autor de uno o más libros.\\
 \texttt{Género} & ID, nombre (único) & Clasificación local del catálogo.\\
 \texttt{Ejemplar} & ID, código (único), condición (buena, desgastada, dañada, perdida o de baja), observaciones & Cada copia física de una edición. Mantiene su propio registro local.\\
 \bottomrule
-\end{tabularx}
+\end{longtable}
 
-\medskip
-\textbf{Submodelo Préstamos y Devoluciones}
-
-\begin{tabularx}{\textwidth}{l Y Y}
+\begin{longtable}{@{}l P{0.36\textwidth} P{0.36\textwidth}@{}}
+\multicolumn{3}{@{}l}{\textbf{Submodelo Préstamos y Devoluciones}}\\
 \toprule
 \textbf{Entidad} & \textbf{Atributos} & \textbf{Descripción}\\
 \midrule
+\endfirsthead
+\multicolumn{3}{@{}l}{\textbf{Submodelo Préstamos y Devoluciones (continuación)}}\\
+\toprule
+\textbf{Entidad} & \textbf{Atributos} & \textbf{Descripción}\\
+\midrule
+\endhead
 \texttt{Curso} & ID, nombre, año escolar & Pre-kínder a 8.º básico de cada año.\\
 \texttt{Usuario} & ID, identificador (único), nombre, tipo (estudiante, docente o asistente), correo, cargo, activo & Persona que pide libros. El estudiante tiene curso y correo obligatorios (RN01).\\
 \texttt{Préstamo} & ID, fecha, vencimiento inicial & Operación de retiro. Guarda el curso al momento del préstamo, para que las estadísticas históricas no cambien si el estudiante cambia de curso.\\
@@ -235,28 +251,31 @@ El modelo implementado tiene 20 entidades, agrupadas en tres vistas: Catálogo, 
 \texttt{AvisoCorreo} & ID, fecha de generación, destinatario, asunto, estado (pendiente, enviado, error o cancelado), enviado en, detalle del error, intentos, último intento & Aviso de atraso preparado o enviado (RN19).\\
 \texttt{Corrección} & ID, fecha, motivo, operador, observaciones & Anulación de un préstamo registrado por error.\\
 \bottomrule
-\end{tabularx}
+\end{longtable}
 
-\medskip
-\textbf{Submodelo Soporte}
-
-\begin{tabularx}{\textwidth}{l Y Y}
+\begin{longtable}{@{}l P{0.36\textwidth} P{0.36\textwidth}@{}}
+\multicolumn{3}{@{}l}{\textbf{Submodelo Soporte}}\\
 \toprule
 \textbf{Entidad} & \textbf{Atributos} & \textbf{Descripción}\\
 \midrule
+\endfirsthead
+\multicolumn{3}{@{}l}{\textbf{Submodelo Soporte (continuación)}}\\
+\toprule
+\textbf{Entidad} & \textbf{Atributos} & \textbf{Descripción}\\
+\midrule
+\endhead
 \texttt{Calendario} & fecha, abierto, permite préstamo, permite renovación, vacaciones, motivo & Un día del calendario de la biblioteca (RN11, RN12, RN16). No se relaciona por clave foránea: las reglas lo consultan por fecha.\\
 \texttt{CambioCalendario} & ID, registrado en, desde, hasta, tipo, motivo, cantidad, cambios & Registro de cada modificación del calendario.\\
 \texttt{Operador} & ID, usuario (único), nombre, rol (administración, bibliotecaria o consulta), clave cifrada, activo, creado en & Cuenta de acceso a la aplicación.\\
 \texttt{Auditoría} & ID, registrado en, operador, acción, ruta, resultado, detalle & Registro de cada operación hecha desde la aplicación.\\
 \bottomrule
-\end{tabularx}
+\end{longtable}
 
-\medskip
 Además de estas 20 entidades, la base tiene las tablas intermedias \texttt{libro\_autor} y \texttt{libro\_genero} (relaciones N:M) y la tabla técnica \texttt{control\_operacion}, que serializa las operaciones concurrentes; en total, 23 tablas.
 
 \subsubsection{Relaciones}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{Relaciones del modelo E-R, con cardinalidad y opcionalidad en ambos extremos.}
 \small
@@ -319,7 +338,7 @@ Nuevo vencimiento & Devuelve C & Tercera devolución\\
 Total: 1 préstamo, 3 devoluciones y 1 renovación. El modelo permite seguir cada copia sin confundir el total de libros con la cantidad de operaciones.
 
 \subsubsection{Diagrama}
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth,height=0.75\textheight,keepaspectratio]{er.png}
 \caption{Diagrama entidad-relación (notación pata de gallo).}
@@ -344,7 +363,7 @@ Total: 1 préstamo, 3 devoluciones y 1 renovación. El modelo permite seguir cad
 \textbf{Paso 7: relaciones n-arias.} No aplica: todas las relaciones del modelo son binarias. La operación que asocia usuario, préstamo y ejemplar se resolvió con dos relaciones binarias (R4 y R6, a través de \texttt{detalle\_prestamo}).
 
 \subsubsection{Diagrama del modelo relacional}
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth,trim=0 600 0 0,clip]{relacional.png}
 \caption{Modelo relacional con claves primarias y foráneas marcadas (PK, FK, UK; «NULL» = admite nulos). Generado del catálogo de una base recién creada: 23 tablas y 21 claves foráneas.}
@@ -357,6 +376,11 @@ Total: 1 préstamo, 3 devoluciones y 1 renovación. El modelo permite seguir cad
 {\small
 \begin{longtable}{@{}p{0.2\textwidth} p{0.13\textwidth} p{0.3\textwidth} l p{0.22\textwidth}@{}}
 \caption{Análisis de formas normales por relación.}\\
+\toprule
+\textbf{Relación} & \textbf{PK} & \textbf{Dependencias funcionales} & \textbf{FN} & \textbf{Justificación}\\
+\midrule
+\endfirsthead
+\caption[]{Análisis de formas normales por relación (continuación).}\\
 \toprule
 \textbf{Relación} & \textbf{PK} & \textbf{Dependencias funcionales} & \textbf{FN} & \textbf{Justificación}\\
 \midrule
@@ -393,7 +417,7 @@ auditoria & id & id $\to$ registrado\_en, operador\_id, operador, accion, ruta, 
 
 \subsubsection{Diagrama del modelo normalizado}
 El modelo relacional de la Figura~2 ya es el resultado de la normalización: no hubo que descomponer más tablas después de transformarlo. Por eso el diagrama normalizado coincide con él.
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth,trim=0 600 0 0,clip]{relacional.png}
 \caption{Modelo relacional normalizado (3FN, la mayoría de las relaciones en FNBC).}
@@ -485,7 +509,7 @@ CREATE TRIGGER actualizar_vencimiento AFTER INSERT ON renovacion
 \end{lstlisting}
 
 \subsubsection{Procedimiento almacenado de KPIs}
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \caption{Indicadores anuales del caso.}
 \small
@@ -553,6 +577,11 @@ La arquitectura propuesta es la siguiente: la bibliotecaria ingresa el ISBN en e
 \subsubsection{Endpoints}
 \begin{longtable}{@{}l l p{0.55\textwidth}@{}}
 \caption{Endpoints principales de la API.}\\
+\toprule
+\textbf{Método} & \textbf{Ruta} & \textbf{Descripción}\\
+\midrule
+\endfirsthead
+\caption[]{Endpoints principales de la API (continuación).}\\
 \toprule
 \textbf{Método} & \textbf{Ruta} & \textbf{Descripción}\\
 \midrule
