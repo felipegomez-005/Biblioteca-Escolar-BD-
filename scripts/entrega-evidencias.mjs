@@ -22,7 +22,7 @@ async function run(sql) {
   return res;
 }
 const casos = [
-  {alias: 'P-01 · Máximo tres ejemplares', regla: 'RN03', objetivo: 'Comprobar que un préstamo no puede incluir más de tres copias.',
+  {alias: 'P-01 · Máximo tres ejemplares', regla: 'RN10', objetivo: 'Comprobar que un préstamo no puede incluir más de tres copias.',
    pasos: ['Elegir un estudiante sin préstamos (id 8).', 'Intentar prestar cuatro copias disponibles en un día hábil.', 'Verificar que no quedó ningún préstamo guardado.'],
    sql: `CALL sp_prestar(8, ARRAY[25,26,27,28], date '2026-11-19');
 SELECT count(*) AS prestamos_del_usuario FROM prestamo WHERE usuario_id = 8`,
@@ -32,19 +32,19 @@ SELECT count(*) AS prestamos_del_usuario FROM prestamo WHERE usuario_id = 8`,
    sql: `SELECT dp.ejemplar_id, p.usuario_id, dp.fecha_cierre FROM detalle_prestamo dp JOIN prestamo p ON p.id = dp.prestamo_id WHERE dp.ejemplar_id = 16;
 CALL sp_prestar(9, ARRAY[16], date '2026-11-19')`,
    analisis: 'El préstamo abierto (fecha_cierre nula) bloquea la copia. El índice único parcial de "un préstamo activo por copia" y el trigger de validación lo impiden.'},
-  {alias: 'P-03 · Día cerrado según calendario', regla: 'RN08', objetivo: 'No permitir préstamos en feriados ni en días sin atención.',
+  {alias: 'P-03 · Día cerrado según calendario', regla: 'RN16', objetivo: 'No permitir préstamos en feriados ni en días sin atención.',
    pasos: ['El 03-06-2026 es feriado en el calendario de prueba.', 'Intentar prestar ese día.'],
    sql: `SELECT fecha, abierto, permite_prestamo, motivo FROM calendario WHERE fecha = '2026-06-03';
 CALL sp_prestar(8, ARRAY[25], date '2026-06-03')`,
    analisis: 'El calendario es una tabla explícita: la biblioteca define qué días atiende. El préstamo se rechaza porque ese día no permite préstamos.'},
-  {alias: 'P-04 · Renovación y atributos calculados', regla: 'RN06–RN07', objetivo: 'Verificar que renovar actualiza el vencimiento y el contador de renovaciones mediante triggers.',
+  {alias: 'P-04 · Renovación y atributos calculados', regla: 'RN05–RN06', objetivo: 'Verificar que renovar actualiza el vencimiento y el contador de renovaciones mediante triggers.',
    pasos: ['Prestar la copia 25 el lunes 02-11-2026.', 'Consultar el vencimiento vigente.', 'Renovar ese detalle (id 11) el 04-11-2026, antes del vencimiento, y volver a consultar.'],
    sql: `CALL sp_prestar(8, ARRAY[25], date '2026-11-02');
 SELECT id AS detalle, vencimiento_vigente, cantidad_renovaciones FROM detalle_prestamo WHERE ejemplar_id = 25 AND fecha_cierre IS NULL;
 CALL sp_renovar(ARRAY[11], date '2026-11-04');
 SELECT id AS detalle, vencimiento_vigente, cantidad_renovaciones FROM detalle_prestamo WHERE ejemplar_id = 25 AND fecha_cierre IS NULL`,
    analisis: 'vencimiento_vigente y cantidad_renovaciones son atributos derivados: los escribe el trigger actualizar_vencimiento al insertar en renovacion, contando solo días hábiles. No se pueden modificar a mano.'},
-  {alias: 'P-05 · Historial inmutable', regla: 'RN15', objetivo: 'Impedir que se cambie o borre el historial de préstamos.',
+  {alias: 'P-05 · Historial inmutable', regla: 'RN09', objetivo: 'Impedir que se cambie o borre el historial de préstamos.',
    pasos: ['Intentar cambiar la fecha de un préstamo existente.', 'Intentar borrarlo.'],
    sql: `UPDATE prestamo SET fecha = '2026-01-01' WHERE id = 1;
 DELETE FROM prestamo WHERE id = 1`,
