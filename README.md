@@ -27,10 +27,11 @@ La interfaz permite:
 - Elegir la condición recibida (bueno o desgastado) de cada ejemplar al devolverlo.
 - Consultar el historial de circulación desde Usuarios → Historial o Catálogo → Ver copias → Historial.
 - Registrar pérdidas/daños permanentes y resolver incidencias por reposición o reembolso recibido.
+- Anular un préstamo ingresado por error desde su historial, conservando el historial y registrando el motivo.
 - Consultar pendientes y estadísticas anuales.
 - Administrar el calendario mensual, feriados, vacaciones y períodos de solo devoluciones, con revisión previa e historial. [Uso y prueba del calendario](docs/calendario.md).
 
-Las devoluciones permiten registrar ejemplares buenos o desgastados; los daños permanentes se gestionan como incidencias. Las sanciones por conducta grave bloquean nuevos préstamos durante dos semanas y conservan su historial al finalizar. No se envían correos ni se realizan pagos desde la aplicación.
+Las devoluciones permiten registrar ejemplares buenos o desgastados; los daños permanentes se gestionan como incidencias. Las sanciones por conducta grave bloquean nuevos préstamos durante dos semanas y conservan su historial al finalizar. Los avisos de correo se envían con `avisos:enviar`; no se realizan pagos desde la aplicación.
 
 La API escucha solamente en `127.0.0.1`. Es una aplicación local de prueba, sin cuentas de acceso de bibliotecarios ni despliegue público. [Documentación de la API](docs/api.md).
 
@@ -92,6 +93,8 @@ Las pruebas crean otra base en memoria y no modifican la copia local. Esta opci�
 | `tests/avisos.test.mjs` | Envío, cancelación de resueltos, registro de errores y deduplicación. |
 | `sql/08_avisos_detalle.sql` | Actualización aditiva: guarda el motivo del error al enviar. |
 | `docs/avisos.md` | Configuración SMTP, frecuencia, comandos y registro de avisos. |
+| `sql/09_anulacion_prestamo.sql` | Actualización repetible: anulación de préstamos con motivo y operador registrados. |
+| `tests/correccion.test.mjs` | Anulación que conserva historial, valida motivo y rechaza incidencias pendientes. |
 | `web/` | Pantallas, estilos y comportamiento de los formularios. |
 | `server/` | Servidor local, rutas de la API y validaciones. |
 | `docs/api.md` | Instrucciones de uso, endpoints y alcance de la aplicación. |
@@ -108,6 +111,8 @@ psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/03_operaciones.
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/04_datos_demo.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/06_administracion_calendario.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/07_devolucion_condiciones.sql
+psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/08_avisos_detalle.sql
+psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/09_anulacion_prestamo.sql
 psql -U postgres -d biblioteca_escolar -v ON_ERROR_STOP=1 -f sql/05_consultas.sql
 ```
 

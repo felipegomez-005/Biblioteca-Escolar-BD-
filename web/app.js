@@ -196,10 +196,24 @@ async function historyModal(type,id) {
           ${d?`<p><strong>Devolución Nº ${d.id}</strong><br>${fmt(d.fecha)} · ${d.condicion==='desgastado'?'Desgastado':'Bueno'}<br>${esc(d.observaciones||'Sin observaciones')}</p>`:''}
           ${i?`<p><strong>${i.tipo==='perdida'?'Pérdida':'Daño permanente'}</strong><br>${fmt(i.fecha)} · ${esc(i.observaciones||'Sin observaciones')}</p>
             ${i.fecha_resolucion?`<p>Resuelta el ${fmt(i.fecha_resolucion)} por ${i.solucion==='reposicion'?`reposición: ${esc(i.codigo_reemplazo)}`:`reembolso: ${esc(i.monto_reembolso)} CLP`}.</p>`:'<p class="help">Reposición o reembolso pendiente.</p>'}`:''}
+          ${!d && !i ? `<div class="actions"><button class="text-button" data-anular="${m.prestamo_id}">Anular préstamo</button></div>` : ''}
         </details>`;
       }).join(''):empty('Sin movimientos registrados')}
       ${isUser?'<p class="help">Las sanciones por conducta grave se consultan desde el botón Sanciones de este usuario.</p>':''}`);
+    $$('[data-anular]',dialog).forEach(b=>b.onclick=()=>anularForm(Number(b.dataset.anular)));
   }catch(error){toast(error.message);}
+}
+function anularForm(prestamoId) {
+  showModal('Anular préstamo',`<form>
+    <div class="notice warn"><strong>Préstamo Nº ${prestamoId}</strong>Se cerrarán todos los ejemplares abiertos de este préstamo y se registrará el motivo. El historial se conserva.</div>
+    ${field('motivo','Motivo de la anulación','<textarea id="motivo" name="motivo" maxlength="1000" required></textarea>',true)}
+    ${input('operador','Operador (opcional)','',{required:false,max:120})}
+    ${field('observaciones','Observaciones (opcional)','<textarea id="observaciones" name="observaciones" maxlength="1000"></textarea>',true)}
+    ${actions('Anular préstamo')}</form>`,async data=>{
+      await post('/anulaciones',{prestamo_id:prestamoId,motivo:data.motivo,operador:data.operador,observaciones:data.observaciones});
+      toast('Préstamo anulado. El historial conserva la corrección.');
+      await renderRoute();
+    });
 }
 async function sanctionsModal(uid) {
   const key=++detailRequest,version=routeVersion;

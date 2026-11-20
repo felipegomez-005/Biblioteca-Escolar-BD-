@@ -247,6 +247,11 @@ export function createApp(db,{today,googleBooks=createGoogleBooks()}={}) {
       await q('CALL biblioteca.sp_resolver_incidencia($1,$2,$3,$4,$5)',[id(resolve[1]),d,solution,solution==='reposicion'?text(b.codigo,'Código nuevo',80):null,amount]);
       return {resuelta:true};
     }
+    if(method==='POST' && p==='/api/anulaciones') {
+      await q('CALL biblioteca.sp_anular_prestamo($1,$2,$3,$4,$5)',[
+        id(b.prestamo_id),text(b.motivo,'Motivo',1000),d,text(b.operador,'Operador',120,false),text(b.observaciones,'Observaciones',1000,false)]);
+      return {anulado:true};
+    }
     throw new InputError('Ruta no encontrada.',404);
   }
 

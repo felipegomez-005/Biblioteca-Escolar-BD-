@@ -80,6 +80,7 @@ Los formularios usan JSON con `Content-Type: application/json` y `X-Biblioteca-R
 | `POST /api/renovaciones` | `usuario_id`, `detalles`. |
 | `POST /api/incidencias` | `detalle_id`, `tipo` (`perdida`/`dano_permanente`), `observaciones`. |
 | `POST /api/incidencias/:id/resolver` | `solucion` (`reposicion`/`reembolso`), `codigo` nuevo o `monto` recibido. |
+| `POST /api/anulaciones` | `prestamo_id`, `motivo` obligatorio, `operador` y `observaciones` opcionales. Cierra los ejemplares abiertos y registra la corrección conservando el historial. |
 | `POST /api/calendario/previsualizar` | `tipo`, `desde`, `hasta`, `motivo`; vacaciones añade `ultima_semana`. Para completar faltantes: `tipo='completar'`, `anio`. No escribe datos. |
 | `POST /api/calendario/configurar` | La misma propuesta y su `version`. Revalida conflictos y guarda todo junto con su historial. |
 
@@ -90,6 +91,8 @@ El alta de libro desde una propuesta incluye `origen_datos='google_books'`, `goo
 Las transacciones de alta de libro incluyen autores, géneros y primera copia: si falla el código del ejemplar se revierte el conjunto. Los procedimientos de circulación aplican sus triggers; la API no sustituye las restricciones por validaciones visuales.
 
 El registro de sanción vuelve a calcular el plazo en el servidor. Las fechas esperadas solo comprueban que la persona confirmó el plazo vigente; no permiten elegir otro inicio o término. Si cambian las fechas desde la revisión devuelve 409 y requiere abrir nuevamente el formulario. Repetir exactamente usuario, motivo y fechas de una solicitud guardada ese día devuelve el mismo registro con `repetida: true`. La API local serializa estas solicitudes; esto no demuestra concurrencia entre conexiones de PostgreSQL nativo.
+
+La anulación de un préstamo (`POST /api/anulaciones`) exige un motivo y conserva el historial: registra la corrección en `correccion` y cierra los ejemplares abiertos como una devolución marcada "Anulación: …". Requiere un día de atención y rechaza préstamos ya cerrados o con incidencias pendientes.
 
 ## Alcance técnico
 
@@ -103,4 +106,4 @@ El registro de sanciones y sus bloqueos pasaron las pruebas HTTP y de base de da
 
 La edición, el historial y la condición de devolución se verifican en conjunto en `tests/administration.test.mjs`. La revisión visual de estas pantallas sigue pendiente. El historial consulta todos los movimientos de ese usuario o ejemplar; aún no tiene paginación. La edición bibliográfica no conserva versiones anteriores de títulos/autores ni registra al operador; sí conserva los identificadores de préstamos y copias.
 
-Pendiente: autenticación de operadores, permisos en un servidor de producción, paginación para grandes catálogos, corrección administrativa de movimientos, integración con ABIES (pospuesta), correo y fechas reales del calendario. No se ha publicado el sitio.
+Pendiente: autenticación de operadores, permisos en un servidor de producción, paginación para grandes catálogos, corrección administrativa de otros movimientos (la anulación de préstamos ya está implementada), integración con ABIES (pospuesta), configuración de la cuenta SMTP real de avisos y fechas reales del calendario. No se ha publicado el sitio.
