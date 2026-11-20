@@ -55,7 +55,7 @@ Felipe Gómez \\[0.5em]
 
 %------------------------------------------------------------
 \section*{Resumen}
-Este informe documenta el proyecto semestral de Bases de Datos realizado para la biblioteca del Colegio Siglo XXI de Lampa, que opera con el sistema ABIES, donde una bibliotecaria administra el catálogo y registra los movimientos de estudiantes, docentes y asistentes de la educación. Se identificaron dos problemas: la carga manual de título, autores y editorial de cada libro, y la dificultad para identificar rápidamente los préstamos pendientes y vencidos. Como mejora se propuso una base de datos relacional que gestiona catálogo, ejemplares físicos y movimientos, integrada con un módulo que consulta por ISBN la Google Books API para autocompletar los datos bibliográficos, con revisión y confirmación de la bibliotecaria y con ingreso manual como alternativa. Se acordaron nueve reglas de negocio (RN01 a RN09) y dos indicadores anuales (préstamos por curso y libros más prestados), y se construyó un modelo entidad-relación de diez entidades dividido en los submodelos de catálogo y de préstamos y devoluciones, que incluye relaciones 1:1, 1:N y N:M. El resultado esperado es agilizar la catalogación, consultar en línea los ejemplares disponibles, pendientes y atrasados, y conservar el historial para estadísticas anuales. Durante el desarrollo el modelo creció a las reglas RN10 a RN19 (calendario, sanciones, pérdidas, indicadores y avisos). Su transformación dio 23 tablas con 21 claves foráneas. Todas quedaron en 3FN, y la mayoría en FNBC; las únicas redundancias son atributos derivados que mantienen los triggers. La base se implementó en PostgreSQL con un script único, se pobló con datos ficticios y se le agregaron triggers de integridad y de cálculo, procedimientos para préstamos, KPIs y una actualización con \texttt{COMMIT}/\texttt{ROLLBACK}, y una API web en Node.js. Las 119 pruebas automáticas y los ocho casos documentados pasaron con los resultados esperados.
+Este informe documenta el proyecto semestral de Bases de Datos realizado para la biblioteca del Colegio Siglo XXI de Lampa, que opera con el sistema ABIES, donde una bibliotecaria administra el catálogo y registra los movimientos de estudiantes, docentes y asistentes de la educación. Se identificaron dos problemas: la carga manual de título, autores y editorial de cada libro, y la dificultad para identificar rápidamente los préstamos pendientes y vencidos. Como mejora se propuso una base de datos relacional que gestiona catálogo, ejemplares físicos y movimientos, integrada con un módulo que consulta por ISBN la Google Books API para autocompletar los datos bibliográficos, con revisión y confirmación de la bibliotecaria y con ingreso manual como alternativa. Se acordaron nueve reglas de negocio (RN01 a RN09) y dos indicadores anuales (préstamos por curso y libros más prestados), y se construyó un modelo entidad-relación que en la presentación de avance tenía diez entidades, en los submodelos de catálogo y de préstamos y devoluciones, con relaciones 1:1, 1:N y N:M. El resultado esperado es agilizar la catalogación, consultar en línea los ejemplares disponibles, pendientes y atrasados, y conservar el historial para estadísticas anuales. Durante el desarrollo se agregaron las reglas RN10 a RN19 (calendario, sanciones, pérdidas, indicadores y avisos) y el modelo creció a 20 entidades y 19 relaciones. Su transformación dio 23 tablas con 21 claves foráneas. Todas quedaron en 3FN, y la mayoría en FNBC; las únicas redundancias son atributos derivados que mantienen los triggers. La base se implementó en PostgreSQL con un script único, se pobló con datos ficticios y se le agregaron triggers de integridad y de cálculo, procedimientos para préstamos, KPIs y una actualización con \texttt{COMMIT}/\texttt{ROLLBACK}, y una API web en Node.js. Las 119 pruebas automáticas y los ocho casos documentados pasaron con los resultados esperados.
 
 \textbf{Palabras clave:} base de datos relacional, modelo entidad-relación, normalización, SQL, PostgreSQL, triggers, biblioteca escolar, ISBN, Google Books API.
 
@@ -150,15 +150,15 @@ El detalle completo va en las minutas (Anexo~B).
 \toprule
 \textbf{N.º} & \textbf{Regla de negocio} & \textbf{Fuente (reunión o correo, fecha)}\\
 \midrule
-RN01 & Los usuarios habilitados son estudiantes, docentes y asistentes de la educación. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN02 & Máximo 3 ejemplares prestados simultáneamente por persona, considerando todos sus préstamos. El límite es el mismo para los tres tipos de usuario. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN03 & El plazo de préstamo inicial es de 3 días hábiles. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN04 & Solo puede existir un préstamo activo por ejemplar físico. Cada copia tiene un código único. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN05 & Se permiten hasta 2 renovaciones por ejemplar. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN06 & Cada renovación agrega 3 días hábiles al vencimiento. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN07 & Un ejemplar atrasado (vencido) no puede ser renovado. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN08 & Se admiten devoluciones anticipadas y devoluciones parciales (por ejemplar, no necesariamente todo el préstamo junto). Entregar un ejemplar no cambia el vencimiento de los demás. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
-RN09 & El historial de movimientos debe conservarse por 10 años. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
+RN01 & Los usuarios habilitados son estudiantes, docentes y asistentes de la educación. Un estudiante debe tener correo y curso; docentes y asistentes no tienen curso. Un usuario inactivo no puede pedir préstamos. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
+RN02 & Máximo 3 ejemplares prestados simultáneamente por persona, considerando todos sus préstamos abiertos. El límite es el mismo para los tres tipos de usuario. & \pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
+RN03 & El plazo de préstamo inicial es de 3 días hábiles, contados desde la fecha del préstamo. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
+RN04 & Solo puede existir un préstamo abierto por ejemplar físico, y solo se prestan ejemplares en condición buena o desgastada. Cada copia tiene un código único. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
+RN05 & Se permiten hasta 2 renovaciones por ejemplar prestado. No se renueva un ejemplar con una pérdida o daño registrado. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
+RN06 & Cada renovación agrega 3 días hábiles al vencimiento vigente. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
+RN07 & Un ejemplar atrasado (la fecha ya pasó su vencimiento vigente) no puede ser renovado. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
+RN08 & Se admiten devoluciones anticipadas y devoluciones parciales (por ejemplar, no necesariamente todo el préstamo junto). Entregar un ejemplar no cambia el vencimiento de los demás. La devolución se registra a nombre del mismo usuario del préstamo. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
+RN09 & El historial de movimientos se conserva por 10 años desde el cierre del préstamo y no se puede modificar ni borrar. &\pend{COMPLETAR: N° y fecha de reunión con bibliotecaria}\\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -172,15 +172,15 @@ Durante el desarrollo se precisaron las siguientes reglas complementarias, que l
 \midrule
 \endhead
 RN10 & Cada operación de préstamo incluye entre 1 y 3 ejemplares distintos. & \pend{COMPLETAR}\\
-RN11 & En la última semana del año escolar solo se reciben devoluciones: no hay préstamos ni renovaciones. & \pend{COMPLETAR}\\
-RN12 & Una renovación no puede hacer vencer el ejemplar dentro de las vacaciones. & \pend{COMPLETAR}\\
-RN13 & Un atraso bloquea nuevos préstamos durante una semana desde la devolución. & \pend{COMPLETAR}\\
+RN11 & En la última semana del año escolar solo se reciben devoluciones: no hay préstamos ni renovaciones. El calendario indica, día por día, si se permiten préstamos y renovaciones. & \pend{COMPLETAR}\\
+RN12 & El plazo de un préstamo o de una renovación no puede entrar ni cruzar las vacaciones. & \pend{COMPLETAR}\\
+RN13 & Mientras un usuario tenga un ejemplar atrasado no puede pedir préstamos. Además, cada atraso lo deja una semana sin préstamos, contada desde el primer día hábil después del vencimiento. & \pend{COMPLETAR}\\
 RN14 & Una falta grave de conducta se sanciona con dos semanas sin préstamos. & \pend{COMPLETAR}\\
-RN15 & La sanción termina el mismo día de la semana en que empezó; si ese día no hay atención, en el siguiente día hábil. & \pend{COMPLETAR}\\
+RN15 & Las sanciones de RN13 y RN14 terminan el mismo día de la semana en que empezaron; si ese día no hay atención, en el siguiente día hábil. & \pend{COMPLETAR}\\
 RN16 & Los feriados, fines de semana y días sin atención no son hábiles; la biblioteca define su calendario. & \pend{COMPLETAR}\\
-RN17 & Un ejemplar perdido o dañado se resuelve con reposición de otra copia o con reembolso. & \pend{COMPLETAR}\\
+RN17 & Un ejemplar perdido o con daño permanente se registra como incidencia y se resuelve con reposición (una copia nueva de la misma edición, en buen estado y nunca prestada) o con reembolso (con su monto). Mientras esté pendiente, el usuario no puede pedir préstamos. & \pend{COMPLETAR}\\
 RN18 & Se calculan dos indicadores anuales: préstamos por curso y libros más prestados. & \pend{COMPLETAR}\\
-RN19 & Se preparan avisos por correo para los préstamos atrasados. & \pend{COMPLETAR}\\
+RN19 & Se preparan avisos por correo para los préstamos atrasados, como máximo uno por préstamo y día. &\pend{COMPLETAR}\\
 \bottomrule
 \end{longtable}
 
@@ -211,7 +211,7 @@ La base se puebla solo con datos de ejemplo inventados (datos sintéticos o fict
 
 %------------------------------------------------------------
 \subsection{Modelo entidad-relación}
-El modelo tiene diez entidades distintas, divididas en dos vistas: el submodelo Catálogo y el submodelo Préstamos y Devoluciones. Incluye relaciones 1:1, 1:N y N:M, con cardinalidad y opcionalidad. Se ilustran los atributos principales de la propuesta. Al implementar las reglas RN10 a RN19 se agregaron las entidades descritas al final de esta sección; el diagrama de la Figura~1 muestra el modelo completo.
+El modelo implementado tiene 20 entidades, agrupadas en tres vistas: Catálogo, Préstamos y Devoluciones, y Soporte (calendario y cuentas de la aplicación). Incluye relaciones 1:1, 1:N y N:M, con cardinalidad y opcionalidad. La presentación de avance mostraba diez entidades; al implementar las reglas RN10 a RN19 se agregaron las demás. Las tablas siguientes listan los atributos tal como quedaron en la base (Sección~3.5), y el diagrama de la Figura~1 muestra el modelo completo.
 
 \subsubsection{Entidades y atributos}
 
@@ -221,10 +221,11 @@ El modelo tiene diez entidades distintas, divididas en dos vistas: el submodelo 
 \toprule
 \textbf{Entidad} & \textbf{Atributos} & \textbf{Descripción}\\
 \midrule
-\texttt{Editorial} & ID, nombre & Editorial de los libros publicados.\\
-\texttt{Libro} & ID, título, ISBN, origen de los datos & Representa la edición y sus datos bibliográficos.\\
+\texttt{Editorial} & ID, nombre (único) & Editorial de los libros publicados.\\
+\texttt{Libro} & ID, título, ISBN (único, 10 o 13 dígitos), año de publicación, origen de los datos (manual o Google Books), ID de Google Books & Representa la edición y sus datos bibliográficos.\\
 \texttt{Autor} & ID, nombre & Autor de uno o más libros.\\
-\texttt{Ejemplar} & ID, código único, condición física & Cada copia física de una edición. Mantiene su propio registro local.\\
+\texttt{Género} & ID, nombre (único) & Clasificación local del catálogo.\\
+\texttt{Ejemplar} & ID, código (único), condición (buena, desgastada, dañada, perdida o de baja), observaciones & Cada copia física de una edición. Mantiene su propio registro local.\\
 \bottomrule
 \end{tabularx}
 
@@ -235,36 +236,40 @@ El modelo tiene diez entidades distintas, divididas en dos vistas: el submodelo 
 \toprule
 \textbf{Entidad} & \textbf{Atributos} & \textbf{Descripción}\\
 \midrule
-\texttt{Usuario} & ID, nombre, tipo de usuario & Estudiante, docente o asistente de la educación.\\
-\texttt{Préstamo} & ID, fecha, curso al prestar, vencimiento inicial & Operación de retiro. El curso al momento del préstamo conserva las estadísticas históricas aunque el estudiante cambie de curso.\\
-\texttt{DetallePréstamo} & ID, vencimiento vigente & Un ejemplar dentro de un préstamo. La fecha se guarda por ejemplar porque cada uno se puede renovar de manera independiente.\\
+\texttt{Curso} & ID, nombre, año escolar & Pre-kínder a 8.º básico de cada año.\\
+\texttt{Usuario} & ID, identificador (único), nombre, tipo (estudiante, docente o asistente), correo, cargo, activo & Persona que pide libros. El estudiante tiene curso y correo obligatorios (RN01).\\
+\texttt{Préstamo} & ID, fecha, vencimiento inicial & Operación de retiro. Guarda el curso al momento del préstamo, para que las estadísticas históricas no cambien si el estudiante cambia de curso.\\
+\texttt{DetallePréstamo} & ID, vencimiento vigente, cantidad de renovaciones, fecha de cierre & Un ejemplar dentro de un préstamo. El vencimiento se guarda por ejemplar porque cada uno se puede renovar y devolver por separado.\\
+\texttt{Renovación} & ID, fecha, vencimiento anterior, nuevo vencimiento & Conserva los cambios de vencimiento de cada ejemplar.\\
 \texttt{Devolución} & ID, fecha & Operación de devolución, que puede contener varios detalles.\\
-\texttt{DetalleDevolución} & ID, observaciones & Ejemplar recibido en una devolución.\\
-\texttt{Renovación} & ID, fecha, nuevo vencimiento & Conserva los cambios de vencimiento de cada ejemplar.\\
+\texttt{DetalleDevolución} & ID, condición recibida (buena o desgastada), observaciones & Ejemplar recibido en una devolución.\\
+\texttt{Incidencia} & ID, fecha, tipo (pérdida o daño permanente), observaciones, fecha de resolución, solución (reposición o reembolso), monto de reembolso & Pérdida o daño de un ejemplar prestado (RN17).\\
+\texttt{Sanción} & ID, inicio, habilitado desde, motivo (conducta grave), observaciones & Sanción por falta grave (RN14--RN15). La sanción por atraso (RN13) no se guarda: se calcula desde las fechas del préstamo.\\
+\texttt{AvisoCorreo} & ID, fecha de generación, destinatario, asunto, estado (pendiente, enviado, error o cancelado), enviado en, detalle del error, intentos, último intento & Aviso de atraso preparado o enviado (RN19).\\
+\texttt{Corrección} & ID, fecha, motivo, operador, observaciones & Anulación de un préstamo registrado por error.\\
 \bottomrule
 \end{tabularx}
 
 \medskip
-\textbf{Entidades agregadas durante el desarrollo}
+\textbf{Submodelo Soporte}
 
 \begin{tabularx}{\textwidth}{l Y Y}
 \toprule
 \textbf{Entidad} & \textbf{Atributos} & \textbf{Descripción}\\
 \midrule
-\texttt{Género} & ID, nombre & Clasificación local del catálogo (N:M con Libro).\\
-\texttt{Curso} & ID, nombre, año escolar & Pre-kínder a 8.º básico de cada año.\\
-\texttt{Incidencia} & ID, fecha, tipo, solución, monto de reembolso & Pérdida o daño de un ejemplar prestado (RN17).\\
-\texttt{Sanción} & ID, inicio, habilitado desde, motivo & Sanción por conducta grave (RN14--RN15).\\
-\texttt{Calendario} & fecha, abierto, permite préstamo, permite renovación, vacaciones & Días de atención de la biblioteca (RN11, RN12, RN16).\\
-\texttt{AvisoCorreo} & ID, fecha, destinatario, estado & Aviso de atraso preparado o enviado (RN19).\\
-\texttt{Corrección} & ID, fecha, motivo, operador & Anulación de un préstamo registrado por error.\\
-\texttt{Operador} y \texttt{Auditoría} & usuario, rol / acción, ruta, resultado & Cuentas de la aplicación y registro de sus operaciones.\\
+\texttt{Calendario} & fecha, abierto, permite préstamo, permite renovación, vacaciones, motivo & Un día del calendario de la biblioteca (RN11, RN12, RN16). No se relaciona por clave foránea: las reglas lo consultan por fecha.\\
+\texttt{CambioCalendario} & ID, registrado en, desde, hasta, tipo, motivo, cantidad, cambios & Registro de cada modificación del calendario.\\
+\texttt{Operador} & ID, usuario (único), nombre, rol (administración, bibliotecaria o consulta), clave cifrada, activo, creado en & Cuenta de acceso a la aplicación.\\
+\texttt{Auditoría} & ID, registrado en, operador, acción, ruta, resultado, detalle & Registro de cada operación hecha desde la aplicación.\\
 \bottomrule
 \end{tabularx}
 
+\medskip
+Además de estas 20 entidades, la base tiene las tablas intermedias \texttt{libro\_autor} y \texttt{libro\_genero} (relaciones N:M) y la tabla técnica \texttt{control\_operacion}, que serializa las operaciones concurrentes; en total, 23 tablas.
+
 \subsubsection{Relaciones}
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{Relaciones del modelo E-R, con cardinalidad y opcionalidad en ambos extremos.}
 \small
@@ -276,17 +281,21 @@ R1 & \texttt{Editorial} -- \texttt{Libro} & 1:N & Editorial 0..1 (un libro tiene
 R2 & \texttt{Libro} -- \texttt{Autor} & N:M & Libro 0..N / Autor 0..N & ---\\
 R3 & \texttt{Libro} -- \texttt{Ejemplar} & 1:N & Libro 1 / Ejemplar 0..N & ---\\
 R4 & \texttt{Usuario} -- \texttt{Préstamo} & 1:N & Usuario 1 / Préstamo 0..N & RN01\\
-R5 & \texttt{Préstamo} -- \texttt{DetallePréstamo} & 1:N & Préstamo 1 / DetallePréstamo 1..3 & RN02\\
+R5 & \texttt{Préstamo} -- \texttt{DetallePréstamo} & 1:N & Préstamo 1 / DetallePréstamo 1..3 & RN10\\
 R6 & \texttt{Ejemplar} -- \texttt{DetallePréstamo} & 1:N & Ejemplar 1 / DetallePréstamo 0..N & RN04\\
 R7 & \texttt{DetallePréstamo} -- \texttt{DetalleDevolución} & 1:1 opcional & DetallePréstamo 1 / DetalleDevolución 0..1 & RN08\\
 R8 & \texttt{Devolución} -- \texttt{DetalleDevolución} & 1:N & Devolución 1 / DetalleDevolución 1..N & RN08\\
 R9 & \texttt{DetallePréstamo} -- \texttt{Renovación} & 1:N & DetallePréstamo 1 / Renovación 0..2 & RN05\\
 R10 & \texttt{Libro} -- \texttt{Género} & N:M & Libro 0..N / Género 0..N & ---\\
-R11 & \texttt{Curso} -- \texttt{Usuario} & 1:N & Curso 0..1 / Usuario 0..N & RN01\\
+R11 & \texttt{Curso} -- \texttt{Usuario} & 1:N & Curso 0..1 (obligatorio para estudiantes) / Usuario 0..N & RN01\\
 R12 & \texttt{Curso} -- \texttt{Préstamo} & 1:N & Curso 0..1 / Préstamo 0..N & RN18\\
 R13 & \texttt{DetallePréstamo} -- \texttt{Incidencia} & 1:1 opcional & DetallePréstamo 1 / Incidencia 0..1 & RN17\\
 R14 & \texttt{Usuario} -- \texttt{Sanción} & 1:N & Usuario 1 / Sanción 0..N & RN14\\
 R15 & \texttt{Préstamo} -- \texttt{AvisoCorreo} & 1:N & Préstamo 1 / AvisoCorreo 0..N & RN19\\
+R16 & \texttt{Usuario} -- \texttt{Devolución} & 1:N & Usuario 1 / Devolución 0..N & RN08\\
+R17 & \texttt{Préstamo} -- \texttt{Corrección} & 1:N & Préstamo 1 / Corrección 0..N & RN09\\
+R18 & \texttt{Ejemplar} -- \texttt{Incidencia} (reposición) & 1:1 opcional & Ejemplar 0..1 / Incidencia 0..1 & RN17\\
+R19 & \texttt{Operador} -- \texttt{Auditoría} & 1:N & Operador 0..1 / Auditoría 0..N & ---\\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -299,6 +308,10 @@ Justificación según el diseño presentado:
 \item \textbf{R7 (1:1 opcional).} Cada detalle de préstamo tiene cero o un detalle de devolución, de modo que se sabe qué copia sigue pendiente y cuál volvió.
 \item \textbf{R8.} Una devolución puede contener varios detalles.
 \item \textbf{R9.} Cada detalle puede tener hasta dos renovaciones.
+\item \textbf{R12.} El préstamo guarda el curso del estudiante en ese momento; docentes y asistentes no tienen curso.
+\item \textbf{R13 y R18 (1:1 opcional).} Un detalle tiene a lo sumo una incidencia, y una copia nueva puede reponer a lo sumo una incidencia.
+\item \textbf{R16.} La devolución pertenece al usuario que pidió el préstamo, y puede cerrar ejemplares de varios préstamos suyos.
+\item \textbf{R19.} La auditoría guarda también intentos sin sesión, por eso el operador es opcional.
 \end{itemize}
 
 \textbf{Ejemplo: devolución parcial y renovación (ejemplares A, B y C).}
@@ -639,7 +652,7 @@ Todas las pruebas se ejecutaron sobre una base recién creada con el script de e
 \begin{itemize}[nosep]
 \item \textbf{Objetivo.} Obtener los dos indicadores anuales acordados.
 \item \textbf{Descripción.} Ejecutar \texttt{CALL sp\_kpis\_anuales(2026)} sobre los datos de ejemplo.
-\item \textbf{Evidencia.} Préstamos por curso: 5.º básico 3, 6.º básico 3 y sin curso (docentes y asistentes) 1. Libros más prestados: «Obra ficticia 1» con 2 ejemplares y las obras 2 a 9 con 1 cada una (evidencias P-06; también en la pantalla de estadísticas de la API).
+\item \textbf{Evidencia.} Préstamos por curso: 5.º básico 3, 6.º básico 3 y sin curso (docentes y asistentes) 1. Libros más prestados: «Obra ficticia 1» con 2 ejemplares y las obras 2 a 9 con 1 cada una (evidencias P-06). La pantalla de estadísticas de la API muestra el mismo cálculo (Figura~\ref{fig:api-estadisticas}).
 \item \textbf{Código.} Procedimiento \texttt{sp\_kpis\_anuales} (Sección~3.6.3).
 \item \textbf{Análisis.} El total por curso (7) coincide con las operaciones de préstamo de 2026 y no con los ejemplares, que es la unidad acordada para el KPI 1.
 \end{itemize}
@@ -659,9 +672,30 @@ Todas las pruebas se ejecutaron sobre una base recién creada con el script de e
 \begin{itemize}[nosep]
 \item \textbf{Objetivo.} Verificar que la API expone las consultas de la base al navegador y respeta las reglas.
 \item \textbf{Descripción.} Levantar la API con datos de ejemplo y llamar a sus rutas: sin sesión, creando la cuenta inicial, consultando ejemplares disponibles y estadísticas, y registrando un préstamo válido y uno inválido.
-\item \textbf{Evidencia.} Sin sesión: 401. Cuenta inicial: 201. \texttt{GET /api/ejemplares?disponibles=1}, \texttt{GET /api/estadisticas} y \texttt{GET /api/auditoria}: 200 con datos en JSON. Préstamo de 4 ejemplares: 400 «Seleccione entre uno y tres ejemplares». Préstamo válido: 201. Capturas de las 11 pantallas en \texttt{BibliotecaSigloXXI-api.pdf}.
+\item \textbf{Evidencia.} Sin sesión: 401. Cuenta inicial: 201. \texttt{GET /api/ejemplares?disponibles=1}, \texttt{GET /api/estadisticas} y \texttt{GET /api/auditoria}: 200 con datos en JSON. Préstamo de 4 ejemplares: 400 «Seleccione entre uno y tres ejemplares». Préstamo válido: 201. Las Figuras~\ref{fig:api-prestamo} a~\ref{fig:api-admin} muestran tres de las pantallas; las 11 están en \texttt{BibliotecaSigloXXI-api.pdf}.
 \item \textbf{Análisis.} La API devuelve los resultados de las consultas y transmite los rechazos de la base como errores comprensibles, sin exponer el SQL.
 \end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{api-prestamo.png}
+\caption{Pantalla de nuevo préstamo. La lista viene de \texttt{GET /api/ejemplares?disponibles=1} y la devolución prevista suma tres días hábiles (RN03).}
+\label{fig:api-prestamo}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{api-estadisticas.png}
+\caption{Pantalla de estadísticas (\texttt{GET /api/estadisticas}, que llama a \texttt{sp\_kpis\_anuales}). Los números difieren de P6 porque cada base recibió préstamos de prueba distintos: P6 incluye el préstamo de P5 (usuario 8, 6.º básico) y esta captura incluye el préstamo válido de P8 (ejemplares 1 y 2 de «Obra ficticia 1» al usuario 7, de 5.º básico).}
+\label{fig:api-estadisticas}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{api-administracion.png}
+\caption{Pantalla de administración: el registro de operaciones (\texttt{GET /api/auditoria}) muestra la cuenta inicial y el préstamo válido de P8, ambos con resultado correcto.}
+\label{fig:api-admin}
+\end{figure}
 
 
 \subsection{Análisis y hallazgos}
@@ -672,7 +706,7 @@ Todas las pruebas se ejecutaron sobre una base recién creada con el script de e
 \item \textbf{Historial:} conservar los movimientos y obtener estadísticas anuales.
 \end{itemize}
 
-\textbf{Decisiones de diseño que cambiaron.} El modelo presentado en el avance tenía diez entidades; al implementar las reglas aparecieron necesidades que no cabían en él. Los días hábiles no se pueden calcular sin saber qué días atiende la biblioteca, así que se agregó la tabla \texttt{calendario}. Las pérdidas y los daños necesitaban su propio registro (\texttt{incidencia}) para no inventar devoluciones falsas. El curso se guardó en el préstamo (\texttt{curso\_al\_prestar\_id}), porque con el curso actual el KPI 1 cambiaría cada año. El historial pasó a ser inmutable: un error se corrige con una anulación y no con un \texttt{UPDATE}.
+\textbf{Decisiones de diseño que cambiaron.} El modelo presentado en el avance tenía diez entidades y el implementado tiene 20; al implementar las reglas aparecieron necesidades que no cabían en él. Los días hábiles no se pueden calcular sin saber qué días atiende la biblioteca, así que se agregó la tabla \texttt{calendario}. Las pérdidas y los daños necesitaban su propio registro (\texttt{incidencia}) para no inventar devoluciones falsas. El curso se guardó en el préstamo (\texttt{curso\_al\_prestar\_id}), porque con el curso actual el KPI 1 cambiaría cada año. El historial pasó a ser inmutable: un error se corrige con una anulación y no con un \texttt{UPDATE}.
 
 \textbf{Dificultades.} La más relevante fue que varias reglas (máximo de ejemplares simultáneos, préstamo con al menos un detalle, renovación antes del vencimiento) no se pueden expresar con restricciones declarativas, y hubo que implementarlas con triggers, incluso diferidos. También costó separar los atributos derivados de los datos históricos para justificar que no rompen 3FN.
 
