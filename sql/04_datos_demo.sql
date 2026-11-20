@@ -23,9 +23,15 @@ INSERT INTO libro_autor(libro_id,autor_id) VALUES (1,1);
 INSERT INTO libro_genero(libro_id,genero_id) SELECT id,1+(id%3) FROM libro;
 INSERT INTO ejemplar(libro_id,codigo)
 SELECT l.id,'DEMO-'||lpad(l.id::text,3,'0')||'-'||c FROM libro l CROSS JOIN generate_series(1,3) c ORDER BY l.id,c;
-INSERT INTO curso(nombre,anio_escolar) VALUES ('1.º medio A',2026),('2.º medio A',2026),('2.º medio A',2027);
+INSERT INTO curso(nombre,anio_escolar)
+SELECT g.nombre || ' ' || s.seccion, y.anio
+FROM (VALUES ('1.º medio',1),('2.º medio',2),('3.º medio',3),('4.º medio',4)) AS g(nombre,orden)
+CROSS JOIN (VALUES ('A'),('B'),('C'),('D')) AS s(seccion)
+CROSS JOIN (VALUES (2026),(2027)) AS y(anio)
+ORDER BY y.anio, g.orden, s.seccion;
 INSERT INTO usuario(identificador,nombre,tipo,correo,curso_actual_id)
-SELECT 'DEMO-EST-'||n,'Estudiante ficticio '||n,'estudiante','estudiante'||n||'@example.invalid',1+(n%2)
+SELECT 'DEMO-EST-'||n,'Estudiante ficticio '||n,'estudiante','estudiante'||n||'@example.invalid',
+  (SELECT id FROM curso WHERE nombre=CASE WHEN n%2=1 THEN '1.º medio A' ELSE '2.º medio A' END AND anio_escolar=2026)
 FROM generate_series(1,10) n;
 INSERT INTO usuario(identificador,nombre,tipo,correo,cargo) VALUES
  ('DEMO-DOC-1','Docente ficticio','docente','docente@example.invalid','Docencia'),
