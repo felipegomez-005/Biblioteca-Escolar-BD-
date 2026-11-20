@@ -1,6 +1,6 @@
-# Biblioteca escolar — Base de datos
+# Biblioteca escolar — Colegio Siglo XXI de Lampa
 
-Base independiente de desarrollo para el proyecto semestral. Usa SQL de PostgreSQL y datos ficticios para probar catálogo, préstamos, devoluciones, renovaciones y sanciones. La biblioteca real utiliza un sistema que identificó como ABIES; su versión y sus mecanismos de integración siguen pendientes de comprobar.
+Base independiente de desarrollo para el proyecto semestral, hecha para la biblioteca del Colegio Siglo XXI de Lampa (Pre-kínder a 8.º básico, un curso por nivel). Usa SQL de PostgreSQL y datos ficticios para probar catálogo, préstamos, devoluciones, renovaciones y sanciones. La biblioteca real utiliza un sistema que identificó como ABIES; su versión y sus mecanismos de integración siguen pendientes de comprobar.
 
 **Esta versión no está conectada a ABIES ni modifica sus datos** ([propuesta de integración](docs/abies.md)). Incluye una aplicación web local con cuentas y roles, una API HTTP, consulta por ISBN a Google Books (verificada con una consulta real), avisos por correo SMTP con envío diario automático, auditoría de cada operación, validación de RUT e ISBN, respaldos y conservación de diez años. Cada instalación configura sus claves locales en `.env`.
 
@@ -158,7 +158,9 @@ Puede guardar consultas en un archivo `.sql` y ejecutarlo con `npm.cmd run db:sq
 
 ## Datos de demostración
 
-El calendario 2026–2027, sus vacaciones y los feriados incluidos son **ficticios para las pruebas**. Deben reemplazarse por el calendario validado de la escuela antes de cualquier uso real. Una fecha sin configuración provoca un error.
+El calendario 2026–2027, sus vacaciones y los feriados incluidos son **ficticios para las pruebas**. Deben reemplazarse por el calendario validado del colegio antes de cualquier uso real. Una fecha sin configuración provoca un error.
+
+Los cursos de ejemplo siguen la estructura del colegio: Pre-kínder, Kínder y 1.º a 8.º básico, sin letras porque hay un curso por nivel, para 2026 y 2027. Los estudiantes de prueba están en 5.º y 6.º básico 2026.
 
 Los estudiantes usan identificadores `DEMO-EST-*` y correos `example.invalid`. No se han importado RUT, nombres, fotografías ni correos reales. Los estados actuales de las vistas dependen de `CURRENT_DATE`; para estudiar sanciones históricas se usa `motivos_bloqueo(usuario, fecha)` con una fecha explícita. Esa función usa el historial conservado de vencimientos y no reconstruye versiones anteriores a una renovación posterior.
 

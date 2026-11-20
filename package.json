@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Base de datos académica independiente para una biblioteca escolar",
+  "description": "Base de datos académica para la biblioteca del Colegio Siglo XXI de Lampa",
   "engines": {
     "node": ">=20.12"
   },

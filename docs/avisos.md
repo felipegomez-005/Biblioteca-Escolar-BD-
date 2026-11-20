@@ -25,7 +25,7 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=usuario
 SMTP_PASS=clave
-SMTP_FROM=Biblioteca escolar <biblioteca@colegio.cl>
+SMTP_FROM=Biblioteca Siglo XXI de Lampa <biblioteca@colegio.cl>
 
 # Envío automático diario dentro de la aplicación
 AVISOS_AUTOMATICOS=1

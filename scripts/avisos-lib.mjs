@@ -8,10 +8,10 @@ export const MAX_INTENTOS = 3;
 export function construirTexto(nombre, detalles) {
   const lineas = detalles.map(d => `- ${d.titulo} (código ${d.codigo}) · vencía el ${fechaEs(d.vencimiento)}`);
   return `Hola ${nombre}:\n\n` +
-    'Tienes ejemplares pendientes de devolución en la biblioteca escolar:\n\n' +
+    'Tienes ejemplares pendientes de devolución en la biblioteca del Colegio Siglo XXI de Lampa:\n\n' +
     `${lineas.join('\n')}\n\n` +
     'Por favor devuélvelos o renueva a la brevedad. Si ya los devolviste, ignora este mensaje.\n\n' +
-    'Biblioteca escolar';
+    'Biblioteca · Colegio Siglo XXI de Lampa';
 }
 
 // Configuración SMTP desde variables de entorno. Devuelve null si falta lo mínimo.

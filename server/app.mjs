@@ -232,7 +232,7 @@ export function createApp(db,{today,googleBooks=createGoogleBooks(),requireAuth=
           await q('SELECT biblioteca.validar_plazo($1::date,$2::date)',[d,vencimiento]);
         } catch { vencimiento=null; }
       }
-      return {fecha:d,calendario:cal,vencimiento,cursos:await q('SELECT * FROM biblioteca.curso ORDER BY anio_escolar,nombre')};
+      return {fecha:d,calendario:cal,vencimiento,cursos:await q(`SELECT * FROM biblioteca.curso ORDER BY anio_escolar,CASE WHEN nombre ILIKE 'pre%' THEN 0 WHEN nombre ILIKE 'k%nder%' THEN 1 ELSE 2 END,nombre`)};
     }
     if(method==='GET' && p==='/api/resumen') return (await q(`SELECT
       (SELECT count(*)::integer FROM biblioteca.libro) AS libros,

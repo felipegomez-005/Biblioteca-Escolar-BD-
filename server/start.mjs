@@ -31,7 +31,7 @@ try {
   const sendMail=await crearEnviador(smtpConfig());
   server=createApp(db,{requireAuth:true,sendMail});
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve);});
-  console.log(`Biblioteca escolar: http://127.0.0.1:${port}`);
+  console.log(`Biblioteca · Colegio Siglo XXI de Lampa: http://127.0.0.1:${port}`);
   console.log(sendMail?'Correo SMTP configurado.':'Correo SMTP sin configurar: los avisos se pueden preparar, pero no enviar.');
   if(process.env.AVISOS_AUTOMATICOS==='1') {
     if(!sendMail) console.log('AVISOS_AUTOMATICOS=1 se ignora hasta configurar SMTP.');

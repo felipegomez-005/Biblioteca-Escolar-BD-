@@ -1,5 +1,6 @@
 -- TODOS los nombres, identificadores, obras y fechas de cierre son ficticios.
--- No representa el calendario oficial chileno ni el de una escuela real.
+-- No representa el calendario oficial chileno ni el del Colegio Siglo XXI de Lampa.
+-- Los cursos siguen su estructura (Pre-kínder a 8.º básico, un curso por nivel), sin datos reales.
 BEGIN;
 SET search_path TO biblioteca, public;
 INSERT INTO calendario(fecha,abierto,permite_prestamo,permite_renovacion,motivo)
@@ -24,14 +25,14 @@ INSERT INTO libro_genero(libro_id,genero_id) SELECT id,1+(id%3) FROM libro;
 INSERT INTO ejemplar(libro_id,codigo)
 SELECT l.id,'DEMO-'||lpad(l.id::text,3,'0')||'-'||c FROM libro l CROSS JOIN generate_series(1,3) c ORDER BY l.id,c;
 INSERT INTO curso(nombre,anio_escolar)
-SELECT g.nombre || ' ' || s.seccion, y.anio
-FROM (VALUES ('1.º medio',1),('2.º medio',2),('3.º medio',3),('4.º medio',4)) AS g(nombre,orden)
-CROSS JOIN (VALUES ('A'),('B'),('C'),('D')) AS s(seccion)
+SELECT g.nombre, y.anio
+FROM (VALUES ('Pre-kínder',1),('Kínder',2),('1.º básico',3),('2.º básico',4),('3.º básico',5),
+             ('4.º básico',6),('5.º básico',7),('6.º básico',8),('7.º básico',9),('8.º básico',10)) AS g(nombre,orden)
 CROSS JOIN (VALUES (2026),(2027)) AS y(anio)
-ORDER BY y.anio, g.orden, s.seccion;
+ORDER BY y.anio, g.orden;
 INSERT INTO usuario(identificador,nombre,tipo,correo,curso_actual_id)
 SELECT 'DEMO-EST-'||n,'Estudiante ficticio '||n,'estudiante','estudiante'||n||'@example.invalid',
-  (SELECT id FROM curso WHERE nombre=CASE WHEN n%2=1 THEN '1.º medio A' ELSE '2.º medio A' END AND anio_escolar=2026)
+  (SELECT id FROM curso WHERE nombre=CASE WHEN n%2=1 THEN '5.º básico' ELSE '6.º básico' END AND anio_escolar=2026)
 FROM generate_series(1,10) n;
 INSERT INTO usuario(identificador,nombre,tipo,correo,cargo) VALUES
  ('DEMO-DOC-1','Docente ficticio','docente','docente@example.invalid','Docencia'),

@@ -21,7 +21,7 @@ async function api(url,options={}) {
 const post=(url,data,method='POST')=>api(url,{method,body:JSON.stringify(data)});
 function toast(message) {clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').hidden=false;toastTimer=setTimeout(()=>$('#toast').hidden=true,5500);}
 function empty(title,description='') {return `<div class="empty"><strong>${esc(title)}</strong>${esc(description)}</div>`;}
-function heading(title,subtitle,buttons='') {return `<div class="page-head"><div><p class="eyebrow">BIBLIOTECA ESCOLAR</p><h1>${title}</h1><p class="subtitle">${subtitle}</p></div>${buttons}</div>`;}
+function heading(title,subtitle,buttons='') {return `<div class="page-head"><div><p class="eyebrow">BIBLIOTECA · COLEGIO SIGLO XXI DE LAMPA</p><h1>${title}</h1><p class="subtitle">${subtitle}</p></div>${buttons}</div>`;}
 function search(placeholder,id='search') {return `<div class="search"><input id="${id}" type="search" placeholder="${placeholder}" aria-label="${placeholder}" autocomplete="off"></div>`;}
 function field(name,label,content,full=false) {return `<div class="field ${full?'full':''}"><label for="${name}">${label}</label>${content}</div>`;}
 function input(name,label,value='',{required=true,type='text',max=150,help='',full=false}={}) {
@@ -590,7 +590,7 @@ async function showAuth(configured) {
   main.innerHTML='';$('#modal-body').innerHTML='';$('#session-box').innerHTML='';
   document.body.classList.add('locked');
   const box=$('#auth');box.hidden=false;
-  box.innerHTML=`<form class="auth-card" novalidate><span class="brand-mark" aria-hidden="true">B<span>·</span></span><p class="eyebrow">BIBLIOTECA ESCOLAR</p>
+  box.innerHTML=`<form class="auth-card" novalidate><span class="brand-mark" aria-hidden="true">B<span>·</span></span><p class="eyebrow">BIBLIOTECA · COLEGIO SIGLO XXI DE LAMPA</p>
     <h1>${configured?'Iniciar sesión':'Crear la cuenta de administración'}</h1>
     <p class="help">${configured?'Ingresa con tu cuenta para gestionar la biblioteca. Cada operación queda registrada a tu nombre.':'Es la primera vez que se abre esta base. Crea la cuenta que administrará los accesos; luego podrás crear las cuentas del resto del equipo.'}</p>
     ${configured?'':input('nombre','Nombre de la persona','',{max:120})}
@@ -623,7 +623,7 @@ async function renderRoute() {
   main.innerHTML='<div class="loading" role="status">Cargando…</div>';
   try {
     await loadContext();if(version!==routeVersion)return;
-    document.title=(titles[route]||'Inicio')+' · Biblioteca escolar';
+    document.title=(titles[route]||'Inicio')+' · Biblioteca Siglo XXI de Lampa';
     await (routes[route]||home)(version);
   } catch(e) {if(version!==routeVersion)return;main.innerHTML=`${heading('No pudimos cargar la biblioteca','Revisa que la aplicación esté abierta en la terminal.')}<div class="notice danger">${esc(e.message)}</div><button class="button" id="retry">Volver a intentar</button>`;$('#retry').onclick=renderRoute;}
 }
