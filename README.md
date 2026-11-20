@@ -40,6 +40,10 @@ Mientras esté abierta, no ejecutes `db:resumen` ni `db:sql` contra la misma bas
 
 Con la aplicación detenida, `npm.cmd run db:backup` crea y verifica una copia en `.local/respaldos/`. Para comprobarla: `npm.cmd run db:verificar -- "ruta-del-archivo.biblioteca"`. Para restaurarla en una carpeta nueva: `npm.cmd run db:restaurar -- "ruta-del-archivo.biblioteca"`. La restauración conserva intacta la base activa. [Instrucciones y activación manual](docs/respaldos.md).
 
+## Avisos por correo
+
+Con la aplicación detenida, `npm.cmd run avisos:enviar` prepara los avisos del día, envía por SMTP los que correspondan y registra el resultado. `npm.cmd run avisos:enviar -- --simular` los lista sin enviar ni modificar nada; `npm.cmd run avisos:preparar` solo genera los pendientes. Los avisos ya devueltos o renovados se cancelan antes de enviar. [Configuración, frecuencia y registro](docs/avisos.md).
+
 ## Comenzar en VSCode
 
 Abra la terminal en esta carpeta. Requiere Node.js 20.12 o posterior.
@@ -83,6 +87,11 @@ Las pruebas crean otra base en memoria y no modifican la copia local. Esta opci�
 | `tests/administration.test.mjs` | Verificación conjunta de edición del catálogo, historial y condiciones de devolución. |
 | `scripts/backup.mjs` | Comandos de respaldo, comprobación y restauración independiente. |
 | `tests/backup.test.mjs` | Integridad, persistencia, secuencias y rechazo de sobrescrituras o bases ocupadas. |
+| `scripts/avisos.mjs` | Comandos de preparación y envío de avisos por correo. |
+| `scripts/avisos-lib.mjs` | Lógica de avisos probada con un transporte simulado. |
+| `tests/avisos.test.mjs` | Envío, cancelación de resueltos, registro de errores y deduplicación. |
+| `sql/08_avisos_detalle.sql` | Actualización aditiva: guarda el motivo del error al enviar. |
+| `docs/avisos.md` | Configuración SMTP, frecuencia, comandos y registro de avisos. |
 | `web/` | Pantallas, estilos y comportamiento de los formularios. |
 | `server/` | Servidor local, rutas de la API y validaciones. |
 | `docs/api.md` | Instrucciones de uso, endpoints y alcance de la aplicación. |
@@ -139,7 +148,7 @@ Los estudiantes usan identificadores `DEMO-EST-*` y correos `example.invalid`. N
 1. Completar la comprobación visual del administrador de calendario y cargar fechas validadas del colegio. Las pruebas automáticas del calendario ya pasaron. Validar también las convenciones del documento de reglas.
 2. Documentar las capturas y demostración de la API de consulta ya implementada.
 3. Mantener la clave de Google Books configurada localmente. La búsqueda real, revisión y guardado ya se verificaron; repetir la comprobación al instalar en otro equipo.
-4. Configurar envío de avisos, frecuencia, remitente y cancelación de avisos que ya no correspondan.
+4. Configurar la cuenta SMTP real y programar la frecuencia de `avisos:enviar`. El envío, el registro de estados/errores y la cancelación de avisos resueltos ya están implementados.
 5. Verificar versión, permisos y opciones de intercambio de ABIES; acordar qué sistema mantiene cada dato.
 6. Completar el informe académico: transformación paso a paso, normalización formal, decisiones asociadas a KPIs y capturas de pruebas.
 

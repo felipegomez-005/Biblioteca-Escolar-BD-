@@ -9,7 +9,9 @@
   },
   "scripts": {
     "start": "node server/start.mjs",
-    "test": "node --test --test-concurrency=1 tests/biblioteca.test.mjs tests/api.test.mjs tests/google-books.test.mjs tests/calendar.test.mjs tests/sanctions.test.mjs tests/administration.test.mjs tests/backup.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/biblioteca.test.mjs tests/api.test.mjs tests/google-books.test.mjs tests/calendar.test.mjs tests/sanctions.test.mjs tests/administration.test.mjs tests/backup.test.mjs tests/avisos.test.mjs",
+    "avisos:enviar": "node scripts/avisos.mjs enviar",
+    "avisos:preparar": "node scripts/avisos.mjs preparar",
     "db:init": "node scripts/local.mjs init",
     "db:backup": "node scripts/backup.mjs crear",
     "db:verificar": "node scripts/backup.mjs verificar",
@@ -19,5 +21,8 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.16"
+  },
+  "dependencies": {
+    "nodemailer": "^10.6.0"
   }
 }

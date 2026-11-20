@@ -24,7 +24,7 @@ Origen de requisitos: cuestionario de la biblioteca y aclaraciones transmitidas 
 | RN16 | Pérdida o daño permanente se resuelve por reposición o reembolso. | Incidencia pendiente bloquea; se conserva el ejemplar original como baja. |
 | RN17 | Historial de préstamos y devoluciones se conserva diez años. | Historial protegido; no se implementa purga automática. |
 | RN18 | Indicadores anuales: operaciones de préstamo por curso y ejemplares prestados por libro. | `sp_kpis_anuales`; renovaciones no aumentan los conteos. |
-| RN19 | Se requieren avisos por correo. | Correo en usuarios y cola pendiente; el envío externo aún no está implementado. |
+| RN19 | Se requieren avisos por correo. | Correo en usuarios, cola de avisos y envío SMTP configurable con registro de estados y cancelación de resueltos; quedan por acordar la cuenta real y la frecuencia. |
 
 ## Convenciones de esta implementación que deben validarse
 
@@ -65,6 +65,6 @@ La fotografía no se incluye en esta primera base: era un dato mencionado en la 
 
 ABIES: versión, instalación y permisos, formatos de intercambio, identificadores externos y sistema responsable de cada registro. No se promete escritura directa en su base ni sincronización automática.
 
-Aplicación: la interfaz local y la API de consulta/escritura ya están implementadas. La API toma la fecha del servidor para circulación y no admite fechas enviadas por los formularios. La consulta a Google Books está implementada, cubierta por pruebas con proveedor simulado y verificada con una consulta real y guardado desde el formulario. Siguen pendientes remitente/proveedor de correo, frecuencia de avisos, reintentos y cancelación de recordatorios resueltos. Los avisos de docentes y asistentes requerirán registrar su correo si también deben recibirlos. Antes de usar la aplicación fuera de este prototipo local se deben definir las cuentas de acceso y roles de operadores.
+Aplicación: la interfaz local y la API de consulta/escritura ya están implementadas. La API toma la fecha del servidor para circulación y no admite fechas enviadas por los formularios. La consulta a Google Books está implementada, cubierta por pruebas con proveedor simulado y verificada con una consulta real y guardado desde el formulario. El envío de avisos por SMTP ya está implementado y probado con un transporte simulado: prepara, envía, registra estados y errores, y cancela los recordatorios ya resueltos. Quedan por acordar el proveedor/cuenta SMTP real, la frecuencia y un reintento automático. Los avisos de docentes y asistentes requerirán registrar su correo si también deben recibirlos. Antes de usar la aplicación fuera de este prototipo local se deben definir las cuentas de acceso y roles de operadores.
 
 Académico: ficha/autorización y evidencias de entrevistas; explicación completa de transformación E-R a relacional, dependencias funcionales y normalización; decisiones del negocio que sustentan los dos indicadores; capturas de pruebas e informe final. Esta base inicial no equivale a la entrega completa.
